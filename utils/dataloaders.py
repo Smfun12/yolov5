@@ -585,6 +585,9 @@ class LoadImagesAndLabels(Dataset):
         if mosaic:
             # Load mosaic
             img, labels = self.load_mosaic(index)
+            # cv2.imwrite('color_img.jpg', img)
+            # cv2.imshow("image", img)
+            # cv2.waitKey()
             shapes = None
 
             # MixUp augmentation
@@ -680,24 +683,41 @@ class LoadImagesAndLabels(Dataset):
         labels4, segments4 = [], []
         s = self.img_size
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
-        indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
+        indices = [index] + random.choices(self.indices, k=1)  # 3 additional image indices
         random.shuffle(indices)
-        for i, index in enumerate(indices):
+        temp = [indices[0], indices[1]]
+        for i, index in enumerate(temp):
             # Load image
             img, _, (h, w) = self.load_image(index)
 
             # place img in img4
             if i == 0:  # top left
                 img4 = np.full((s * 2, s * 2, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
+                M = np.float32([
+                    [1, 0, 0],
+                    [0.2, 1, 0]]
+                )
+
+                img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]))
                 x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
             elif i == 1:  # top right
+                angle = np.radians(10)
+                M = np.float32([
+                    [np.cos(angle), -(np.sin(angle)), 0],
+                    [np.sin(angle), np.cos(angle), 0]
+                ])
+
+                img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]))
+                # img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                 x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, s * 2), yc
                 x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
             elif i == 2:  # bottom left
+                # img = cv2.flip(img, 0)
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
             elif i == 3:  # bottom right
+                # img = cv2.flip(img, 1)
                 x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
