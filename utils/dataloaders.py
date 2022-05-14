@@ -7,6 +7,7 @@ import glob
 import hashlib
 import json
 import math
+import numpy
 import os
 import random
 import shutil
@@ -689,10 +690,12 @@ class LoadImagesAndLabels(Dataset):
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
         indices = [index] + random.choices(self.indices, k=2)  # 3 additional image indices
         random.shuffle(indices)
-        temp = [indices[0], indices[0], indices[1], indices[1]]
+        temp = [indices[0], indices[1], indices[1], indices[2]]
+        avg_img = np.zeros((640,640,3),numpy.float)
         for i, index in enumerate(temp):
             # Load image
             img, _, (h, w) = self.load_image(index)
+            avg_img = avg_img + cv2.resize(img, (640, 640)) / 4
 
             # place img in img4
             if i == 0:  # top left
@@ -701,18 +704,17 @@ class LoadImagesAndLabels(Dataset):
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
             elif i == 1:  # top right
 
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                 x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, s * 2), yc
                 x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
             elif i == 2:  # bottom left
                 # img = cv2.flip(img, 0)
-                # img = np.zeros((h, w, 3), dtype=np.uint8)
-                # img[:, 0:w // 2] = (255, 0, 0)  # (B, G, R)
-                # img[:, w // 2:w] = (0, 255, 0)
+                img = np.zeros((h, w, 3), dtype=np.uint8)
+                img[0:h//2, :] = (255, 0, 0)  # (B, G, R)
+                img[h // 2:h, :] = (45, 255, 255)
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
             elif i == 3:  # bottom right
-                img = cv2.flip(img, 0)
+                img = avg_img
                 x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
