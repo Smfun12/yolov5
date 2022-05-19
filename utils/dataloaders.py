@@ -586,7 +586,6 @@ class LoadImagesAndLabels(Dataset):
         if mosaic:
             # Load mosaic
             img, labels = self.load_mosaic(index)
-            # cv2.imwrite('color_img.jpg', img)
             # cv2.imshow("image", img)
             # cv2.waitKey()
 
@@ -688,15 +687,22 @@ class LoadImagesAndLabels(Dataset):
         labels4, segments4 = [], []
         s = self.img_size
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
-        indices = [index] + random.choices(self.indices, k=2)  # 3 additional image indices
+        indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
+        avg_indices = [index] + random.choices(self.indices, k=9)
         random.shuffle(indices)
-        temp = [indices[0], indices[1], indices[1], indices[2]]
-        avg_img = np.zeros((640,640,3),numpy.float)
-        for i, index in enumerate(temp):
+
+        for i, k in enumerate(avg_indices):
+            img, _, _ = self.load_image(k)
+            if i == 0:
+                dst = img
+                dst = cv2.resize(dst, (640,640))
+            else:
+                img = cv2.resize(img, (640,640))
+                dst = cv2.addWeighted(img, 0.5, dst, 0.5, 0.0)
+
+        for i, index in enumerate(indices):
             # Load image
             img, _, (h, w) = self.load_image(index)
-            avg_img = avg_img + cv2.resize(img, (640, 640)) / 4
-
             # place img in img4
             if i == 0:  # top left
                 img4 = np.full((s * 2, s * 2, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
@@ -708,13 +714,13 @@ class LoadImagesAndLabels(Dataset):
                 x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
             elif i == 2:  # bottom left
                 # img = cv2.flip(img, 0)
-                img = np.zeros((h, w, 3), dtype=np.uint8)
-                img[0:h//2, :] = (255, 0, 0)  # (B, G, R)
-                img[h // 2:h, :] = (45, 255, 255)
+                # img = np.zeros((h, w, 3), dtype=np.uint8)
+                # img[0:h//2, :] = (255, 0, 0)  # (B, G, R)
+                # img[h // 2:h, :] = (45, 255, 255)
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
             elif i == 3:  # bottom right
-                img = avg_img
+                img = dst
                 x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
