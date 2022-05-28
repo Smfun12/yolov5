@@ -7,6 +7,7 @@ import glob
 import hashlib
 import json
 import math
+import numpy
 import os
 import random
 import shutil
@@ -57,9 +58,7 @@ def exif_size(img):
     s = img.size  # (width, height)
     try:
         rotation = dict(img._getexif().items())[orientation]
-        if rotation == 6:  # rotation 270
-            s = (s[1], s[0])
-        elif rotation == 8:  # rotation 90
+        if rotation in [6, 8]:  # rotation 270 or 90
             s = (s[1], s[0])
     except Exception:
         pass
@@ -156,7 +155,7 @@ class InfiniteDataLoader(dataloader.DataLoader):
         return len(self.batch_sampler.sampler)
 
     def __iter__(self):
-        for i in range(len(self)):
+        for _ in range(len(self)):
             yield next(self.iterator)
 
 
@@ -224,10 +223,9 @@ class LoadImages:
                 self.cap.release()
                 if self.count == self.nf:  # last video
                     raise StopIteration
-                else:
-                    path = self.files[self.count]
-                    self.new_video(path)
-                    ret_val, img0 = self.cap.read()
+                path = self.files[self.count]
+                self.new_video(path)
+                ret_val, img0 = self.cap.read()
 
             self.frame += 1
             s = f'video {self.count + 1}/{self.nf} ({self.frame}/{self.frames}) {path}: '
@@ -390,13 +388,14 @@ class LoadStreams:
 
 def img2label_paths(img_paths):
     # Define label paths as a function of image paths
-    sa, sb = os.sep + 'images' + os.sep, os.sep + 'labels' + os.sep  # /images/, /labels/ substrings
+    sa, sb = f'{os.sep}images{os.sep}', f'{os.sep}labels{os.sep}'  # /images/, /labels/ substrings
     return [sb.join(x.rsplit(sa, 1)).rsplit('.', 1)[0] + '.txt' for x in img_paths]
 
 
 class LoadImagesAndLabels(Dataset):
     # YOLOv5 train_loader/val_loader, loads images and labels for training and validation
     cache_version = 0.6  # dataset labels *.cache version
+    rand_interp_methods = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, cv2.INTER_LANCZOS4]
 
     def __init__(self,
                  path,
@@ -455,7 +454,7 @@ class LoadImagesAndLabels(Dataset):
 
         # Display cache
         nf, nm, ne, nc, n = cache.pop('results')  # found, missing, empty, corrupt, total
-        if exists and LOCAL_RANK in (-1, 0):
+        if exists and LOCAL_RANK in {-1, 0}:
             d = f"Scanning '{cache_path}' images and labels... {nf} found, {nm} missing, {ne} empty, {nc} corrupt"
             tqdm(None, desc=prefix + d, total=n, initial=n, bar_format=BAR_FORMAT)  # display cache results
             if cache['msgs']:
@@ -587,6 +586,12 @@ class LoadImagesAndLabels(Dataset):
         if mosaic:
             # Load mosaic
             img, labels = self.load_mosaic(index)
+            # cv2.imshow("image", img)
+            # cv2.waitKey()
+
+            # 2 різні зображення(змінені)
+            # додати однотонні фото(перевірка на біас, чому з одним фото погані результати)
+            # додати усереднені фото
             shapes = None
 
             # MixUp augmentation
@@ -665,8 +670,8 @@ class LoadImagesAndLabels(Dataset):
             h0, w0 = im.shape[:2]  # orig hw
             r = self.img_size / max(h0, w0)  # ratio
             if r != 1:  # if sizes are not equal
-                im = cv2.resize(im, (int(w0 * r), int(h0 * r)),
-                                interpolation=cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA)
+                interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
+                im = cv2.resize(im, (int(w0 * r), int(h0 * r)), interpolation=interp)
             return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
         else:
             return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
@@ -683,23 +688,40 @@ class LoadImagesAndLabels(Dataset):
         s = self.img_size
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
         indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
+        avg_indices = [index] + random.choices(self.indices, k=9)
         random.shuffle(indices)
+        labels10 = []
+        for i, k in enumerate(avg_indices):
+            img, _, _ = self.load_image(k)
+            labels10.append(self.labels[k].copy())
+            if i == 0:
+                dst = img
+                dst = cv2.resize(dst, (640,640))
+            else:
+                img = cv2.resize(img, (640,640))
+                dst = cv2.addWeighted(img, 0.2, dst, 0.8, 0.0)
+
         for i, index in enumerate(indices):
             # Load image
             img, _, (h, w) = self.load_image(index)
-
             # place img in img4
             if i == 0:  # top left
                 img4 = np.full((s * 2, s * 2, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
                 x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
             elif i == 1:  # top right
+
                 x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, s * 2), yc
                 x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
             elif i == 2:  # bottom left
+                # img = cv2.flip(img, 0)
+                # img = np.zeros((h, w, 3), dtype=np.uint8)
+                # img[0:h//2, :] = (255, 0, 0)  # (B, G, R)
+                # img[h // 2:h, :] = (45, 255, 255)
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
             elif i == 3:  # bottom right
+                img = dst
                 x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
@@ -709,6 +731,9 @@ class LoadImagesAndLabels(Dataset):
 
             # Labels
             labels, segments = self.labels[index].copy(), self.segments[index].copy()
+            if i == 3:
+                for label in labels10:
+                    labels = np.concatenate((labels, label), 0)
             if labels.size:
                 labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
                 segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
