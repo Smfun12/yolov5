@@ -7,7 +7,6 @@ import glob
 import hashlib
 import json
 import math
-import numpy
 import os
 import random
 import shutil
@@ -586,12 +585,6 @@ class LoadImagesAndLabels(Dataset):
         if mosaic:
             # Load mosaic
             img, labels = self.load_mosaic(index)
-            # cv2.imshow("image", img)
-            # cv2.waitKey()
-
-            # 2 різні зображення(змінені)
-            # додати однотонні фото(перевірка на біас, чому з одним фото погані результати)
-            # додати усереднені фото
             shapes = None
 
             # MixUp augmentation
@@ -688,19 +681,7 @@ class LoadImagesAndLabels(Dataset):
         s = self.img_size
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
         indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
-        avg_indices = [index] + random.choices(self.indices, k=9)
         random.shuffle(indices)
-        labels10 = []
-        for i, k in enumerate(avg_indices):
-            img, _, _ = self.load_image(k)
-            labels10.append(self.labels[k].copy())
-            if i == 0:
-                dst = img
-                dst = cv2.resize(dst, (640,640))
-            else:
-                img = cv2.resize(img, (640,640))
-                dst = cv2.addWeighted(img, 0.2, dst, 0.8, 0.0)
-
         for i, index in enumerate(indices):
             # Load image
             img, _, (h, w) = self.load_image(index)
@@ -710,18 +691,12 @@ class LoadImagesAndLabels(Dataset):
                 x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
             elif i == 1:  # top right
-
                 x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, s * 2), yc
                 x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
             elif i == 2:  # bottom left
-                # img = cv2.flip(img, 0)
-                # img = np.zeros((h, w, 3), dtype=np.uint8)
-                # img[0:h//2, :] = (255, 0, 0)  # (B, G, R)
-                # img[h // 2:h, :] = (45, 255, 255)
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
             elif i == 3:  # bottom right
-                img = dst
                 x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
@@ -731,9 +706,6 @@ class LoadImagesAndLabels(Dataset):
 
             # Labels
             labels, segments = self.labels[index].copy(), self.segments[index].copy()
-            if i == 3:
-                for label in labels10:
-                    labels = np.concatenate((labels, label), 0)
             if labels.size:
                 labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
                 segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
