@@ -688,19 +688,9 @@ class LoadImagesAndLabels(Dataset):
         labels4, segments4 = [], []
         s = self.img_size
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
-        indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
-        avg_indices = [index] + random.choices(self.indices, k=9)
+        indices = [index] + random.choices(self.indices, k=9)  # 3 additional image indices
         labels10 = []
-        dst = np.array([])
-        for i, k in enumerate(avg_indices):
-            img, _, _ = self.load_image(k)
-            if i == 0:
-                dst = img
-                dst = cv2.resize(dst, (640, 640))
-            labels10.append(self.labels[k].copy())
-            img = cv2.resize(img, (640, 640))
-            dst = cv2.addWeighted(img, 0.2, dst, 0.8, 0.0)
-
+        dst = []
         for i, index in enumerate(indices):
             # Load image
             img, _, (h, w) = self.load_image(index)
@@ -710,34 +700,38 @@ class LoadImagesAndLabels(Dataset):
                 x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
             elif i == 1:  # top right
-
                 x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, s * 2), yc
                 x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
             elif i == 2:  # bottom left
-                # img = cv2.flip(img, 0)
-                # img = np.zeros((h, w, 3), dtype=np.uint8)
-                # img[0:h//2, :] = (255, 0, 0)  # (B, G, R)
-                # img[h // 2:h, :] = (45, 255, 255)
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
-            elif i == 3:  # bottom right
-                img = dst
-                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
-                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+            elif i > 2:  # bottom right
+                labels10.append(self.labels[index].copy())
+                if i == 3:
+                    dst = img
+                    dst = cv2.resize(dst, (640, 640))
+                else:
+                    img = cv2.resize(img, (640, 640))
+                    dst = cv2.addWeighted(img, 0.2, dst, 0.8, 0.0)
+                    if i == 9:
+                        x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
+                        x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+                        img = dst
 
-            img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
-            padw = x1a - x1b
-            padh = y1a - y1b
+            if i < 3 or i == 9:
+                img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
+                padw = x1a - x1b
+                padh = y1a - y1b
 
-            # Labels
-            labels, segments = self.labels[index].copy(), self.segments[index].copy()
-            if i == 3:
-                labels = np.concatenate(labels10, 0)
-            if labels.size:
-                labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
-                segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
-            labels4.append(labels)
-            segments4.extend(segments)
+                # Labels
+                labels, segments = self.labels[index].copy(), self.segments[index].copy()
+                if i == 9:
+                    labels = np.concatenate(labels10, 0)
+                if labels.size:
+                    labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
+                    segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
+                labels4.append(labels)
+                segments4.extend(segments)
 
         # Concat/clip labels
         labels4 = np.concatenate(labels4, 0)
