@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import numpy
+import time
 import os
 import random
 import shutil
@@ -689,17 +690,16 @@ class LoadImagesAndLabels(Dataset):
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
         indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
         avg_indices = [index] + random.choices(self.indices, k=9)
-        random.shuffle(indices)
         labels10 = []
+        dst = np.array([])
         for i, k in enumerate(avg_indices):
             img, _, _ = self.load_image(k)
-            labels10.append(self.labels[k].copy())
             if i == 0:
                 dst = img
-                dst = cv2.resize(dst, (640,640))
-            else:
-                img = cv2.resize(img, (640,640))
-                dst = cv2.addWeighted(img, 0.2, dst, 0.8, 0.0)
+                dst = cv2.resize(dst, (640, 640))
+            labels10.append(self.labels[k].copy())
+            img = cv2.resize(img, (640, 640))
+            dst = cv2.addWeighted(img, 0.2, dst, 0.8, 0.0)
 
         for i, index in enumerate(indices):
             # Load image
@@ -732,8 +732,7 @@ class LoadImagesAndLabels(Dataset):
             # Labels
             labels, segments = self.labels[index].copy(), self.segments[index].copy()
             if i == 3:
-                for label in labels10:
-                    labels = np.concatenate((labels, label), 0)
+                labels = np.concatenate(labels10, 0)
             if labels.size:
                 labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
                 segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
