@@ -176,11 +176,11 @@ class EquProcessor(BaseProcessor):
     ) -> int:
         assert self.root
         # check validity
-        # assert 0 <= mask_on_src[0] and 0 <= mask_on_src[1]
-        # assert mask_on_src[0] + mask.shape[0] <= src.shape[0]
-        # assert mask_on_src[1] + mask.shape[1] <= src.shape[1]
-        # assert mask_on_tgt[0] + mask.shape[0] <= tgt.shape[0]
-        # assert mask_on_tgt[1] + mask.shape[1] <= tgt.shape[1]
+        assert 0 <= mask_on_src[0] and 0 <= mask_on_src[1]
+        assert mask_on_src[0] + mask.shape[0] <= src.shape[0]
+        assert mask_on_src[1] + mask.shape[1] <= src.shape[1]
+        assert mask_on_tgt[0] + mask.shape[0] <= tgt.shape[0]
+        assert mask_on_tgt[1] + mask.shape[1] <= tgt.shape[1]
 
         if len(mask.shape) == 3:
             mask = mask.mean(-1)

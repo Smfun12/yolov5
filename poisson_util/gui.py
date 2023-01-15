@@ -136,7 +136,11 @@ def create_poisson_img(src, tgt, fst_bb, result=None):
     gui = GUI(proc, src, tgt, result, 100)
     mask_x = int(fst_bb[2]-fst_bb[0])
     mask_y = int(fst_bb[3]-fst_bb[1])
+    mask_x = min(mask_x, tgt.shape[1])
+    mask_y = min(mask_y, tgt.shape[0])
     mask = np.zeros([mask_y, mask_x], np.uint8) + 255
-    gui.proc.reset(gui.src, mask, gui.tgt, (gui.y0, gui.x0), (0, 0))
-    gui.gui_out, err = gui.proc.step(100)
+    if mask.shape[0] > src.shape[0]:
+        print("error")
+    gui.proc.reset(gui.src, mask, gui.tgt, (0, 0), (0, 0))
+    gui.gui_out, err = gui.proc.step(1000)
     return gui.gui_out

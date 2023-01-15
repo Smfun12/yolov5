@@ -760,9 +760,13 @@ class LoadImagesAndLabels(Dataset):
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
         indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
         random.shuffle(indices)
-        img2 = self.load_image(indices[1])[0]
+        img2, _, (h2, w2) = self.load_image(indices[1])
 
         for i, index in enumerate(indices):
+
+            # Labels
+            labels, segments = self.labels[index].copy(), self.segments[index].copy()
+
             # Load image
             img, _, (h, w) = self.load_image(index)
             # place img in img4
@@ -777,19 +781,18 @@ class LoadImagesAndLabels(Dataset):
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
             elif i == 3:  # bottom right
+                h, w = min(h,h2), min(w,w2)
                 x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+                padw = x1a - x1b
+                padh = y1a - y1b
+                img = gui.create_poisson_img(img, img2, xywhn2xyxy(labels[0, 1:], w, h, padw, padh))
 
             img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
             padw = x1a - x1b
             padh = y1a - y1b
 
-            # Labels
-            labels, segments = self.labels[index].copy(), self.segments[index].copy()
-
             if i == 3:
-                img = gui.create_poisson_img(img, img2, xywhn2xyxy(labels[0, 1:], w, h, padw, padh))
-                img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]
                 numpy.append(labels, self.labels[0])
 
             if labels.size:
