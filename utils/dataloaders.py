@@ -8,8 +8,6 @@ import glob
 import hashlib
 import json
 import math
-import numpy
-import time
 import os
 import random
 import shutil
@@ -20,6 +18,7 @@ from pathlib import Path
 from threading import Thread
 from urllib.parse import urlparse
 
+import numpy
 import numpy as np
 import psutil
 import torch
@@ -29,6 +28,7 @@ import yaml
 from PIL import ExifTags, Image, ImageOps
 from torch.utils.data import DataLoader, Dataset, dataloader, distributed
 from tqdm import tqdm
+import poisson_util.gui as gui
 
 from utils.augmentations import (Albumentations, augment_hsv, classify_albumentations, classify_transforms, copy_paste,
                                  letterbox, mixup, random_perspective)
@@ -660,12 +660,10 @@ class LoadImagesAndLabels(Dataset):
         if mosaic:
             # Load mosaic
             img, labels = self.load_mosaic(index)
+
             # cv2.imshow("image", img)
             # cv2.waitKey()
 
-            # 2 різні зображення(змінені)
-            # додати однотонні фото(перевірка на біас, чому з одним фото погані результати)
-            # додати усереднені фото
             shapes = None
 
             # MixUp augmentation
@@ -760,9 +758,10 @@ class LoadImagesAndLabels(Dataset):
         labels4, segments4 = [], []
         s = self.img_size
         yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
-        indices = [index] + random.choices(self.indices, k=9)  # 3 additional image indices
-        labels10 = []
-        dst = []
+        indices = [index] + random.choices(self.indices, k=3)  # 3 additional image indices
+        random.shuffle(indices)
+        img2 = self.load_image(indices[1])[0]
+
         for i, index in enumerate(indices):
             # Load image
             img, _, (h, w) = self.load_image(index)
@@ -777,33 +776,28 @@ class LoadImagesAndLabels(Dataset):
             elif i == 2:  # bottom left
                 x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
-            elif i > 2:  # bottom right
-                labels10.append(self.labels[index].copy())
-                if i == 3:
-                    dst = img
-                    dst = cv2.resize(dst, (640, 640))
-                else:
-                    img = cv2.resize(img, (640, 640))
-                    dst = cv2.addWeighted(img, 0.2, dst, 0.8, 0.0)
-                    if i == 9:
-                        x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
-                        x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
-                        img = dst
+            elif i == 3:  # bottom right
+                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
+                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
-            if i < 3 or i == 9:
-                img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
-                padw = x1a - x1b
-                padh = y1a - y1b
+            img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
+            padw = x1a - x1b
+            padh = y1a - y1b
 
-                # Labels
-                labels, segments = self.labels[index].copy(), self.segments[index].copy()
-                if i == 9:
-                    labels = np.concatenate(labels10, 0)
-                if labels.size:
-                    labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
-                    segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
-                labels4.append(labels)
-                segments4.extend(segments)
+            # Labels
+            labels, segments = self.labels[index].copy(), self.segments[index].copy()
+
+            if i == 3:
+                img = gui.create_poisson_img(img, img2, xywhn2xyxy(labels[0, 1:], w, h, padw, padh))
+                img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]
+                numpy.append(labels, self.labels[0])
+
+            if labels.size:
+                labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
+                segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
+
+            labels4.append(labels)
+            segments4.extend(segments)
 
         # Concat/clip labels
         labels4 = np.concatenate(labels4, 0)
