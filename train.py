@@ -25,13 +25,18 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
+import numpy
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import yaml
 from torch.optim import lr_scheduler
+from torch.utils.data import dataloader
 from tqdm import tqdm
+
+from poisson_util import gui, io
+from utils import general
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -477,7 +482,59 @@ def parse_opt(known=False):
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
 
+def generate_poisson_imgs():
+    images = '../datasets/VOC/images/'
+    img_folder = os.listdir(images)
+    label_folder = '../datasets/VOC/labels/'
+    lbls = os.listdir(label_folder)
+
+    split_to_img = {}
+    split_to_label = {}
+
+    for file in img_folder:
+        if os.path.isdir(images + file):
+            split_to_img[file] = []
+            imgs = os.listdir(images + file)
+            for img in imgs:
+                split_to_img[file].append(img)
+            split_to_img[file].sort()
+
+    for file in lbls:
+        if os.path.isdir(label_folder + file):
+            split_to_label[file] = []
+            labels_ = os.listdir(label_folder + file)
+            for label in labels_:
+                split_to_label[file].append(label)
+            split_to_label[file].sort()
+
+    for k in split_to_img.keys():
+        imgs = split_to_img[k]
+        imgs = [i for i in imgs if i.endswith('.jpg')]
+        labels = split_to_label[k]
+        labels = [i for i in labels if i.endswith('.txt')]
+        for i in range(len(imgs) - 1):
+            src_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i])
+            tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i + 1])
+            if len(src_lbl.shape) > 1:
+                src_lbl = src_lbl[0]
+            bbs = general.xywhn2xyxy(src_lbl[1:])
+            poisson_img = gui.create_poisson_img(images + k + '/' + imgs[i], images + k + '/' + imgs[i+1], bbs, 100)
+            img = str(int(imgs[-1].split('.')[0]) + 1) + '.jpg'
+            lbl = str(int(labels[-1].split('.')[0]) + 1) + '.txt'
+            imgs.append(img)
+            labels.append(lbl)
+            if len(tgt_lbl.shape) > 1:
+                conc_label = numpy.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
+            else:
+                conc_label = numpy.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[0]))
+            conc_label[0:tgt_lbl.shape[0]] = tgt_lbl[:]
+            conc_label[-1] = src_lbl
+            io.write_image(images + k + '/' + img, poisson_img)
+            numpy.savetxt(label_folder + k + '/' + lbl, X=conc_label)
+
+
 def main(opt, callbacks=Callbacks()):
+    generate_poisson_imgs()
     # Checks
     if RANK in {-1, 0}:
         print_args(vars(opt))

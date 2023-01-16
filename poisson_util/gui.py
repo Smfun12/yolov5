@@ -21,11 +21,11 @@ class GUI(object):
     3. result with fix rate refresh.
     """
 
-    def __init__(self, proc: BaseProcessor, src: numpy.ndarray, tgt: numpy.ndarray, out: str, n: int):
+    def __init__(self, proc: BaseProcessor, src: str, tgt: str, out: str, n: int):
         super().__init__()
         self.xt, self.yt = 0, 0
-        self.src = src
-        self.tgt = tgt
+        self.src = read_image(src)
+        self.tgt = read_image(tgt)
         self.x0, self.y0 = 0, 0
         self.y1, self.x1 = self.src.shape[:2]
         self.out = out
@@ -136,11 +136,11 @@ def create_poisson_img(src, tgt, fst_bb, result=None):
     gui = GUI(proc, src, tgt, result, 100)
     mask_x = int(fst_bb[2]-fst_bb[0])
     mask_y = int(fst_bb[3]-fst_bb[1])
-    mask_x = min(mask_x, tgt.shape[1])
-    mask_y = min(mask_y, tgt.shape[0])
+    mask_x = min(mask_x, gui.tgt.shape[1], gui.src.shape[1])
+    mask_y = min(mask_y, gui.tgt.shape[0], gui.src.shape[0])
     mask = np.zeros([mask_y, mask_x], np.uint8) + 255
-    if mask.shape[0] > src.shape[0]:
+    if mask.shape[0] > gui.src.shape[0] or mask.shape[1] > gui.src.shape[1]:
         print("error")
     gui.proc.reset(gui.src, mask, gui.tgt, (0, 0), (0, 0))
-    gui.gui_out, err = gui.proc.step(1000)
+    gui.gui_out, err = gui.proc.step(10000)
     return gui.gui_out
