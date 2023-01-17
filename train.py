@@ -512,10 +512,11 @@ def generate_poisson_imgs(opt):
         imgs = [i for i in imgs if i.endswith('.jpg')]
         labels = split_to_label[k]
         labels = [i for i in labels if i.endswith('.txt')]
-        for i in range(len(imgs) - 1):
+        LOGGER.info('Processing {}'.format(k))
+        for i in range(0, len(imgs) - 1, 2):
             if i == opt.poisson_images:
                 break
-            LOGGER.info('{} out of {}'.format(i, len(imgs)))
+            LOGGER.info('{} out of {}, limit {}'.format(i, len(imgs), opt.poisson_images))
             src_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i])
             tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i + 1])
             if len(src_lbl.shape) > 1:
