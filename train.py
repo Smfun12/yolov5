@@ -478,11 +478,11 @@ def parse_opt(known=False):
     parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='Upload data, "val" option')
     parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
-
+    parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
 
-def generate_poisson_imgs():
+def generate_poisson_imgs(opt):
     images = '../datasets/VOC/images/'
     img_folder = os.listdir(images)
     label_folder = '../datasets/VOC/labels/'
@@ -513,6 +513,9 @@ def generate_poisson_imgs():
         labels = split_to_label[k]
         labels = [i for i in labels if i.endswith('.txt')]
         for i in range(len(imgs) - 1):
+            if i == opt.opt.poisson_images:
+                break
+            LOGGER.info('{} out of {}'.format(i, len(imgs)))
             src_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i])
             tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i + 1])
             if len(src_lbl.shape) > 1:
@@ -534,7 +537,7 @@ def generate_poisson_imgs():
 
 
 def main(opt, callbacks=Callbacks()):
-    generate_poisson_imgs()
+    generate_poisson_imgs(opt)
     # Checks
     if RANK in {-1, 0}:
         print_args(vars(opt))
