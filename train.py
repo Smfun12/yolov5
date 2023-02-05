@@ -492,6 +492,8 @@ def generate_poisson_imgs(opt):
     split_to_label = {}
 
     for file in img_folder:
+        if file == 'VOCdevkit':
+            continue
         if os.path.isdir(images + file):
             split_to_img[file] = []
             imgs = os.listdir(images + file)
@@ -521,20 +523,44 @@ def generate_poisson_imgs(opt):
             tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i + 1])
             if len(src_lbl.shape) > 1:
                 src_lbl = src_lbl[0]
-            bbs = general.xywhn2xyxy(src_lbl[1:])
-            poisson_img = gui.create_poisson_img(images + k + '/' + imgs[i], images + k + '/' + imgs[i+1], bbs, 100)
+            if len(tgt_lbl.shape) == 1:
+                temp = np.zeros((1, tgt_lbl.shape[0]))
+                temp[0:] = tgt_lbl
+                tgt_lbl = temp
+            src_img = gui.read_image(images + k + '/' + imgs[i])
+            bbs = general.xywhn2xyxy(src_lbl[1:], w=src_img.shape[1], h=src_img.shape[0])
+
+            tgt_bbs = []
+            tgt_img = gui.read_image(images + k + '/' + imgs[i+1])
+            for j in range(len(tgt_lbl)):
+                instance = tgt_lbl[j]
+                tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
+            poisson_img, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, bbs, tgt_bbs=tgt_bbs)
+            stt_point = (int(choice_x), int(choice_y))
+            bbs = (bbs * scale_factor) / 100
+            # snd_point = (int(choice_x + (bbs[2] - bbs[0])), int(choice_y + (bbs[3] - bbs[1])))
+            # color = (0, 0, 0)
+            # cv2.rectangle(poisson_img, stt_point, snd_point, color, 3)
+            # for j in range(len(tgt_bbs)):
+            #     cv2.rectangle(poisson_img, (int(tgt_bbs[j][0]), int(tgt_bbs[j][1])), (int(tgt_bbs[j][2]), int(tgt_bbs[j][3])), color, 3)
+            # cv2.imshow('win', poisson_img)
+            # cv2.waitKey()
+            coordinates = np.asarray([choice_x, choice_y, choice_x + bbs[2] - bbs[0], choice_y + bbs[3] - bbs[1]])
+            y_output = general.xyxy2xywhn(coordinates, w=poisson_img.shape[1], h=poisson_img.shape[0])
+            y_output = np.insert(y_output, 0, src_lbl[0])
             img = str(int(imgs[-1].split('.')[0]) + 1) + '.jpg'
             lbl = str(int(labels[-1].split('.')[0]) + 1) + '.txt'
             imgs.append(img)
             labels.append(lbl)
-            if len(tgt_lbl.shape) > 1:
+            if len(tgt_lbl) > 1:
                 conc_label = numpy.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
             else:
-                conc_label = numpy.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[0]))
+                conc_label = numpy.zeros((tgt_lbl.shape[0], tgt_lbl.shape[1]))
             conc_label[0:tgt_lbl.shape[0]] = tgt_lbl[:]
-            conc_label[-1] = src_lbl
+            conc_label[-1] = y_output
             io.write_image(images + k + '/' + img, poisson_img)
             numpy.savetxt(label_folder + k + '/' + lbl, X=conc_label)
+            LOGGER.info("Created new image {}".format(images + k + '/' + img))
 
 
 def main(opt, callbacks=Callbacks()):
