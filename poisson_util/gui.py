@@ -185,7 +185,7 @@ def method_name(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc
 
         for i in range(gui.tgt.shape[1]):
             for j in range(gui.tgt.shape[0]):
-                x_min_src_bb, y_min_src_bb, x_max_src_bb, y_max_src_bb = i, j, min(i + mask_x, gui.tgt.shape[1]), min(j + mask_y, gui.tgt.shape[1])
+                x_min_src_bb, y_min_src_bb, x_max_src_bb, y_max_src_bb = i, j, min(i + mask_x, gui.tgt.shape[1]), min(j + mask_y, gui.tgt.shape[0])
                 intersections = []
                 can_add = True
                 for tgt_bb in tgt_bbs:
