@@ -177,6 +177,8 @@ def method_name(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc
         if scale_percent == 0:
             scale_percent = 50
             increase_overlap = True
+            if increase_overlap >= 1:
+                raise ValueError
         gui = GUI(proc, src, tgt, result, 100, scale_percent=scale_percent)
         fst_bb_clone = fst_bb * (scale_percent / 100)
 
