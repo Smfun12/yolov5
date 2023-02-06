@@ -478,6 +478,7 @@ def parse_opt(known=False):
     parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='Upload data, "val" option')
     parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
+    parser.add_argument('--generate_poisson', type=bool, default=False, help="Generation of poisson images")
     parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
@@ -568,7 +569,8 @@ def generate_poisson_imgs(opt):
 
 
 def main(opt, callbacks=Callbacks()):
-    generate_poisson_imgs(opt)
+    if opt.generate_poisson:
+        generate_poisson_imgs(opt)
     # Checks
     if RANK in {-1, 0}:
         print_args(vars(opt))
