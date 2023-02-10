@@ -521,8 +521,21 @@ def generate_poisson_imgs(opt):
                 break
             src_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i])
             tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i + 1])
-            if len(src_lbl.shape) > 1:
+
+            if len(src_lbl.shape) == 1:
+                temp = np.zeros((1, src_lbl.shape[0]))
+                temp[0:] = src_lbl
+                src_lbl = temp
+            found_class = None
+            for idx, ll in enumerate(src_lbl):
+                if ll[0] == 10:
+                    found_class = idx
+                    break
+
+            if len(src_lbl.shape) > 1 and not found_class:
                 src_lbl = src_lbl[0]
+            else:
+                src_lbl = src_lbl[found_class]
             if int(src_lbl[0]) != 10:
                 continue
             LOGGER.info('{} out of {}, limit {}'.format(i, len(imgs), opt.poisson_images))
