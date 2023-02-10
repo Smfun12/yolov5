@@ -519,13 +519,13 @@ def generate_poisson_imgs(opt):
         for i in range(0, len(imgs) - 1, 2):
             if i == opt.poisson_images:
                 break
-            LOGGER.info('{} out of {}, limit {}'.format(i, len(imgs), opt.poisson_images))
             src_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i])
             tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i + 1])
             if len(src_lbl.shape) > 1:
                 src_lbl = src_lbl[0]
             if int(src_lbl[0]) != 10:
                 continue
+            LOGGER.info('{} out of {}, limit {}'.format(i, len(imgs), opt.poisson_images))
             if len(tgt_lbl.shape) == 1:
                 temp = np.zeros((1, tgt_lbl.shape[0]))
                 temp[0:] = tgt_lbl
