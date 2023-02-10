@@ -156,7 +156,7 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None):
     gui = None
     mask_x, mask_y = None, None
     increase_overlap = False
-    scale_percent = 55
+    scale_percent = 105
     overlap_per = 0.05
     fst_bb_clone, gui, mask_x, mask_y, scale_percent = method_name(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc,
                                                     result, scale_percent, src, tgt, tgt_bbs, valid_points)
@@ -225,5 +225,5 @@ def method_name(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc
                     can_add = False
                 if can_add and (i + mask_x < gui.tgt.shape[1]) and (j + mask_y < gui.tgt.shape[0]):
                     valid_points.append((i, j))
-    # print("Scale_percent={}, overlap_per={}".format(scale_percent, overlap_per))
+    print("Scale_percent={}, overlap_per={}".format(scale_percent, overlap_per))
     return fst_bb_clone, gui, mask_x, mask_y, scale_percent
