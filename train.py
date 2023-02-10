@@ -524,6 +524,8 @@ def generate_poisson_imgs(opt):
             tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i + 1])
             if len(src_lbl.shape) > 1:
                 src_lbl = src_lbl[0]
+            if int(src_lbl[0]) != 10:
+                continue
             if len(tgt_lbl.shape) == 1:
                 temp = np.zeros((1, tgt_lbl.shape[0]))
                 temp[0:] = tgt_lbl
