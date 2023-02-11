@@ -536,10 +536,12 @@ def generate_poisson_imgs(opt):
                 src_lbl = src_lbl[found_class]
             if int(src_lbl[0]) != 10:
                 continue
+            move_to_next_folder = False
             for j in range(0, len(imgs)-1):
                 if i == j:
                     continue
                 if j == opt.poisson_images:
+                    move_to_next_folder = True
                     break
                 tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[j])
                 LOGGER.info('{} out of {}, limit {}'.format(j, len(imgs), opt.poisson_images))
@@ -585,6 +587,8 @@ def generate_poisson_imgs(opt):
                 except ValueError:
                     LOGGER.info("Image {} could not be pasted onto {}".format(images + k + '/' + imgs[i], images + k + '/' + imgs[i+1]))
                     continue
+            if move_to_next_folder:
+                break
 
 
 def main(opt, callbacks=Callbacks()):
