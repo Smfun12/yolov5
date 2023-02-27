@@ -16,6 +16,8 @@ Tutorial:   https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data
 """
 
 import argparse
+
+import cv2
 import math
 import os
 import random
@@ -480,6 +482,7 @@ def parse_opt(known=False):
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
     parser.add_argument('--generate_poisson', type=bool, default=False, help="Generation of poisson images")
     parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
+    parser.add_argument('--img_per_folder', type=int, default=1, help='Number of generated poisson images per folder')
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
 
@@ -488,6 +491,7 @@ def generate_poisson_imgs(opt):
     img_folder = os.listdir(images)
     label_folder = '../datasets/VOC/labels/'
     lbls = os.listdir(label_folder)
+    img_per_folder = opt.img_per_folder
 
     split_to_img = {}
     split_to_label = {}
@@ -511,13 +515,15 @@ def generate_poisson_imgs(opt):
             split_to_label[file].sort()
 
     for k in split_to_img.keys():
+        img_per_folder_exceeded = False
         imgs = split_to_img[k]
         imgs = [i for i in imgs if i.endswith('.jpg')]
         labels = split_to_label[k]
         labels = [i for i in labels if i.endswith('.txt')]
         LOGGER.info('Processing {}'.format(k))
         for i in range(0, len(imgs) - 1):
-
+            if img_per_folder_exceeded:
+                break
             src_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i])
 
             if len(src_lbl.shape) == 1:
@@ -536,9 +542,13 @@ def generate_poisson_imgs(opt):
                 src_lbl = src_lbl[found_class]
             if int(src_lbl[0]) != 10:
                 continue
+
             for j in range(0, len(imgs)-1):
                 if i == j:
                     continue
+                if j == img_per_folder:
+                    img_per_folder_exceeded = True
+                    break
                 if j == opt.poisson_images:
                     break
                 tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[j])
