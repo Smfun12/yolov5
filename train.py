@@ -483,6 +483,7 @@ def parse_opt(known=False):
     parser.add_argument('--generate_poisson', type=bool, default=False, help="Generation of poisson images")
     parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
     parser.add_argument('--img_per_folder', type=int, default=1, help='Number of generated poisson images per folder')
+    parser.add_argument('--obj_classes', type=str, default='', help='Object classes to be generated')
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
 
@@ -540,19 +541,20 @@ def generate_poisson_imgs(opt):
                 src_lbl = src_lbl[0]
             else:
                 src_lbl = src_lbl[found_class]
-            if int(src_lbl[0]) != 10:
+            obj_classes = list(map(lambda x: int(x), opt.obj_classes.split(',')))
+            if int(src_lbl[0]) not in obj_classes:
                 continue
 
             for j in range(0, len(imgs)-1):
                 if i == j:
                     continue
-                if j == img_per_folder:
+                if j == img_per_folder*len(obj_classes):
                     img_per_folder_exceeded = True
                     break
-                if j == opt.poisson_images:
-                    break
+                # if j == opt.poisson_images:
+                #     break
                 tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[j])
-                LOGGER.info('{} out of {}, limit {}'.format(j, len(imgs), opt.poisson_images))
+                LOGGER.info('{} out of {}, limit {}'.format(j, len(imgs), img_per_folder*len(obj_classes)))
                 if len(tgt_lbl.shape) == 1:
                     temp = np.zeros((1, tgt_lbl.shape[0]))
                     temp[0:] = tgt_lbl
