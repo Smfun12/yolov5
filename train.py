@@ -493,6 +493,7 @@ def generate_poisson_imgs(opt):
     label_folder = '../datasets/VOC/labels/'
     lbls = os.listdir(label_folder)
     img_per_folder = opt.img_per_folder
+    obj_classes = list(map(lambda x: int(x), opt.obj_classes.split(',')))
 
     split_to_img = {}
     split_to_label = {}
@@ -533,7 +534,7 @@ def generate_poisson_imgs(opt):
                 src_lbl = temp
             found_class = None
             for idx, ll in enumerate(src_lbl):
-                if ll[0] == 10:
+                if ll[0] in obj_classes:
                     found_class = idx
                     break
 
@@ -541,7 +542,6 @@ def generate_poisson_imgs(opt):
                 src_lbl = src_lbl[0]
             else:
                 src_lbl = src_lbl[found_class]
-            obj_classes = list(map(lambda x: int(x), opt.obj_classes.split(',')))
             if int(src_lbl[0]) not in obj_classes:
                 continue
 
