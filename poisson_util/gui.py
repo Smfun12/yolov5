@@ -158,8 +158,8 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None):
     increase_overlap = False
     scale_percent = 105
     overlap_per = 0.05
-    fst_bb_clone, gui, mask_x, mask_y, scale_percent = method_name(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc,
-                                                    result, scale_percent, src, tgt, tgt_bbs, valid_points)
+    fst_bb_clone, gui, mask_x, mask_y, scale_percent = paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc,
+                                                                    result, scale_percent, src, tgt, tgt_bbs, valid_points)
 
     choice_x, choice_y = random.choice(valid_points)
     # print(choice_x, choice_y)
@@ -170,11 +170,11 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None):
     return gui.gui_out, choice_x, choice_y, scale_percent
 
 
-def method_name(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc, result, scale_percent, src, tgt,
-                tgt_bbs, valid_points):
+def paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc, result, scale_percent, src, tgt,
+                 tgt_bbs, valid_points):
     while len(valid_points) == 0:
         scale_percent -= 5
-        if scale_percent == 0:
+        if scale_percent < 50:
             scale_percent = 50
             increase_overlap = True
             if increase_overlap >= 1:
