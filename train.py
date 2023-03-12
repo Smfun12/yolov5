@@ -499,12 +499,10 @@ def generate_poisson_imgs(opt):
     split_to_label = {}
 
     img_folder.remove('VOCdevkit')
-    img_folder.remove('val2012')
-    img_folder.remove('test2007')
-    img_folder.remove('val2007')
+    # img_folder.remove('val2012')
+    # img_folder.remove('test2007')
+    # img_folder.remove('val2007')
     for file in img_folder:
-        if file == 'VOCdevkit':
-            continue
         if os.path.isdir(images + file):
             split_to_img[file] = []
             imgs = os.listdir(images + file)
