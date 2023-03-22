@@ -34,6 +34,9 @@ import yaml
 from torch.optim import lr_scheduler
 from tqdm import tqdm
 
+from poisson_util import io, gui
+from utils import general
+
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
@@ -436,7 +439,7 @@ def parse_opt(known=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
-    parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
+    parser.add_argument('--data', type=str, default=ROOT / 'data/VOC.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=100, help='total training epochs')
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
@@ -474,12 +477,128 @@ def parse_opt(known=False):
     parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='Upload data, "val" option')
     parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
+    parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
+    parser.add_argument('--img_per_folder', type=int, default=1, help='Number of generated poisson images per folder')
+    parser.add_argument('--obj_classes', type=str, default='5,10', help='Object classes to be generated')
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
+
+def generate_poisson_imgs(opt):
+    images = '../datasets/VOC/images/'
+    img_folder = os.listdir(images)
+    label_folder = '../datasets/VOC/labels/'
+    lbls = os.listdir(label_folder)
+    img_per_folder = opt.img_per_folder
+    obj_classes = list(map(lambda x: int(x), opt.obj_classes.split(',')))
+
+    split_to_img = {}
+    split_to_label = {}
+
+    img_folder.remove('VOCdevkit')
+    img_folder.remove('val2012')
+    img_folder.remove('test2007')
+    img_folder.remove('val2007')
+    for file in img_folder:
+        if os.path.isdir(images + file):
+            split_to_img[file] = []
+            imgs = os.listdir(images + file)
+            for img in imgs:
+                split_to_img[file].append(img)
+            split_to_img[file].sort()
+
+    for file in lbls:
+        if os.path.isdir(label_folder + file):
+            split_to_label[file] = []
+            labels_ = os.listdir(label_folder + file)
+            for label in labels_:
+                split_to_label[file].append(label)
+            split_to_label[file].sort()
+
+    obj_samples = {}
+    for k in split_to_img.keys():
+        img_per_folder_exceeded = False
+        imgs = split_to_img[k]
+        imgs = [i for i in imgs if i.endswith('.jpg')]
+        labels = split_to_label[k]
+        labels = [i for i in labels if i.endswith('.txt')]
+        for i in range(0, len(imgs) - 1):
+            if img_per_folder_exceeded:
+                break
+            src_lbl = np.loadtxt(label_folder + k + '/' + labels[i])
+
+            if len(src_lbl.shape) == 1:
+                temp = np.zeros((1, src_lbl.shape[0]))
+                temp[0:] = src_lbl
+                src_lbl = temp
+            found_class = None
+            for idx, ll in enumerate(src_lbl):
+                if ll[0] in obj_classes:
+                    found_class = idx
+                    break
+
+            if len(src_lbl.shape) > 1 and not found_class:
+                src_lbl = src_lbl[0]
+            else:
+                src_lbl = src_lbl[found_class]
+            if int(src_lbl[0]) not in obj_classes:
+                continue
+            else:
+                obj_samples[images + k + '/' + imgs[i]] = src_lbl
+
+    for k in split_to_img.keys():
+        imgs = split_to_img[k]
+        imgs = [i for i in imgs if i.endswith('.jpg')]
+        labels = split_to_label[k]
+        labels = [i for i in labels if i.endswith('.txt')]
+        LOGGER.info('Processing {}'.format(k))
+
+        for j in range(0, len(imgs)-1):
+            if j == img_per_folder*len(obj_classes):
+                break
+            tgt_lbl = np.loadtxt(label_folder + k + '/' + labels[j])
+            LOGGER.info('{} out of {}, limit {}'.format(j, len(imgs), img_per_folder*len(obj_classes)))
+            if len(tgt_lbl.shape) == 1:
+                temp = np.zeros((1, tgt_lbl.shape[0]))
+                temp[0:] = tgt_lbl
+                tgt_lbl = temp
+            rnd_img = random.choice(list(obj_samples.keys()))
+            src_img = io.read_image(rnd_img)
+            src_lbl = obj_samples[rnd_img]
+            bbs = general.xywhn2xyxy(src_lbl[1:], w=src_img.shape[1], h=src_img.shape[0])
+
+            tgt_bbs = []
+            tgt_img = io.read_image(images + k + '/' + imgs[j])
+            for iterable in range(len(tgt_lbl)):
+                instance = tgt_lbl[iterable]
+                tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
+            try:
+                naive_cp, choice_x, choice_y, scale_factor = gui.naive_copy_paste_img(src_img, tgt_img, bbs, tgt_bbs=tgt_bbs)
+                bbs = (bbs * scale_factor) / 100
+                coordinates = np.asarray([choice_x, choice_y, choice_x + bbs[2] - bbs[0], choice_y + bbs[3] - bbs[1]])
+                y_output = general.xyxy2xywhn(coordinates, w=naive_cp.shape[1], h=naive_cp.shape[0])
+                y_output = np.insert(y_output, 0, src_lbl[0])
+                img = str(int(imgs[-1].split('.')[0]) + 1) + '.jpg'
+                lbl = str(int(labels[-1].split('.')[0]) + 1) + '.txt'
+                imgs.append(img)
+                labels.append(lbl)
+                if len(tgt_lbl) > 1:
+                    conc_label = np.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
+                else:
+                    conc_label = np.zeros((tgt_lbl.shape[0], tgt_lbl.shape[1]))
+                conc_label[0:tgt_lbl.shape[0]] = tgt_lbl[:]
+                conc_label[-1] = y_output
+                io.write_image(images + k + '/' + img, naive_cp)
+                np.savetxt(label_folder + k + '/' + lbl, X=conc_label)
+                LOGGER.info("Created new image {}".format(images + k + '/' + img))
+            except ValueError:
+                LOGGER.info("Image {} could not be pasted onto {}".format(rnd_img, images + k + '/' + imgs[j]))
+                continue
+
 
 
 def main(opt, callbacks=Callbacks()):
     # Checks
+    generate_poisson_imgs(opt)
     if RANK in {-1, 0}:
         print_args(vars(opt))
         check_git_status()
