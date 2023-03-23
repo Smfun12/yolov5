@@ -582,10 +582,7 @@ def generate_poisson_imgs(opt):
                 lbl = str(int(labels[-1].split('.')[0]) + 1) + '.txt'
                 imgs.append(img)
                 labels.append(lbl)
-                if len(tgt_lbl) > 1:
-                    conc_label = np.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
-                else:
-                    conc_label = np.zeros((tgt_lbl.shape[0], tgt_lbl.shape[1]))
+                conc_label = np.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
                 conc_label[0:tgt_lbl.shape[0]] = tgt_lbl[:]
                 conc_label[-1] = y_output
                 io.write_image(images + k + '/' + img, naive_cp)
