@@ -499,9 +499,9 @@ def generate_poisson_imgs(opt):
     split_to_label = {}
 
     img_folder.remove('VOCdevkit')
-    # img_folder.remove('val2012')
-    # img_folder.remove('test2007')
-    # img_folder.remove('val2007')
+    img_folder.remove('val2012')
+    img_folder.remove('test2007')
+    img_folder.remove('val2007')
     for file in img_folder:
         if os.path.isdir(images + file):
             split_to_img[file] = []
@@ -592,10 +592,7 @@ def generate_poisson_imgs(opt):
                 lbl = str(int(labels[-1].split('.')[0]) + 1) + '.txt'
                 imgs.append(img)
                 labels.append(lbl)
-                if len(tgt_lbl) > 1:
-                    conc_label = numpy.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
-                else:
-                    conc_label = numpy.zeros((tgt_lbl.shape[0], tgt_lbl.shape[1]))
+                conc_label = numpy.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
                 conc_label[0:tgt_lbl.shape[0]] = tgt_lbl[:]
                 conc_label[-1] = y_output
                 io.write_image(images + k + '/' + img, poisson_img)
