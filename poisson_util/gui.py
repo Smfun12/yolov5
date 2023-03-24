@@ -74,8 +74,8 @@ def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
     # cv2.waitKey()
     tgt[choice_y:y_end, choice_x:x_end] = blur(img)
     tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2] = blur(tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2])
-    cv2.imshow('win', tgt)
-    cv2.waitKey()
+    # cv2.imshow('win', tgt)
+    # cv2.waitKey()
     return tgt, choice_x, choice_y, scale_percent
 
 
