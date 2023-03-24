@@ -2,6 +2,7 @@ import random
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFilter
 
 from poisson_util.io import write_image
 
@@ -68,12 +69,28 @@ def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
     x_0,y_0,x_1,y_1 = int(fst_bb_clone[0]),int(fst_bb_clone[1]),int(fst_bb_clone[2]),int(fst_bb_clone[3])
     x_end,y_end = choice_x+x_1-x_0, choice_y+y_1-y_0
     img = src[y_0:y_1, x_0:x_1]
+    # img = blur(img)
     # cv2.imshow('win', img)
     # cv2.waitKey()
-    tgt[choice_y:y_end, choice_x:x_end] = img
-    # cv2.imshow('win',tgt)
-    # cv2.waitKey()
+    tgt[choice_y:y_end, choice_x:x_end] = blur(img)
+    tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2] = blur(tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2])
+    cv2.imshow('win', tgt)
+    cv2.waitKey()
     return tgt, choice_x, choice_y, scale_percent
+
+
+def blur(image):
+
+    blurred_img = cv2.GaussianBlur(image, (21, 21), 0)
+    mask = np.zeros(image.shape, np.uint8)
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.threshold(gray, 60, 255, cv2.THRESH_BINARY)[1]
+    contours, hierarchy = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    cv2.drawContours(mask, contours, -1, (255, 255, 255), 5)
+    output = np.where(mask == np.array([255, 255, 255]), blurred_img, image)
+    return output
 
 
 def paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, result, scale_percent, src, tgt,
