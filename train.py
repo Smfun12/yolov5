@@ -477,7 +477,7 @@ def parse_opt(known=False):
     parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='Upload data, "val" option')
     parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
-    parser.add_argument('--generate_poisson', type=bool, default=True, help="Generation of poisson images")
+    parser.add_argument('--generate_poisson', type=bool, default=False, help="Generation of poisson images")
     parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
     parser.add_argument('--img_per_folder', type=int, default=1, help='Number of generated poisson images per folder')
     parser.add_argument('--obj_classes', type=str, default='5,10', help='Object classes to be generated')
