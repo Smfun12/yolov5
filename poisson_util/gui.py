@@ -45,7 +45,7 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
-def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
+def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, mask,result=None):
     exclude_xx = []
     exclude_yy = []
     for tgt_bb in tgt_bbs:
@@ -70,9 +70,25 @@ def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
     img = src[y_0:y_1, x_0:x_1]
     # cv2.imshow('win', img)
     # cv2.waitKey()
-    tgt[choice_y:y_end, choice_x:x_end] = img
+
+    roi = tgt[choice_y:y_end, choice_x:x_end]
+
+    mask = mask[y_0:y_1, x_0:x_1]
+    mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
+    mask_inv = cv2.bitwise_not(mask)
+    img1_bg = cv2.bitwise_and(roi, roi, mask=mask_inv)
+    img2_fg = cv2.bitwise_and(img, img, mask=mask)
+
+    dst = cv2.add(img1_bg, img2_fg)
+    tgt[choice_y:y_end, choice_x:x_end] = dst
+
     # cv2.imshow('win',tgt)
     # cv2.waitKey()
+    # tgt[choice_y:y_end, choice_x:x_end] = img
+    # cv2.imshow('win', tgt)
+    # cv2.waitKey()
+
     return tgt, choice_x, choice_y, scale_percent
 
 
