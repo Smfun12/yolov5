@@ -1,5 +1,6 @@
 import random
 
+import PIL
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -72,25 +73,41 @@ def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
     # img = blur(img)
     # cv2.imshow('win', img)
     # cv2.waitKey()
-    tgt[choice_y:y_end, choice_x:x_end] = blur(img)
-    tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2] = blur(tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2])
-    # cv2.imshow('win', tgt)
-    # cv2.waitKey()
+    bbox_dict = [{'x0':fst_bb_clone[0], 'y0': fst_bb_clone[1], 'x1': fst_bb_clone[2], 'y1': fst_bb_clone[3]}]
+    tgt[choice_y:y_end, choice_x:x_end] = np.array(blur(img,bbox_dict))
+    # tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2] = blur(tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2], bbox_dict)
+    # tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2] = blur(img, bbox_dict)
+    cv2.imshow('win', tgt)
+    cv2.waitKey(0)
     return tgt, choice_x, choice_y, scale_percent
 
 
-def blur(image):
-
-    blurred_img = cv2.GaussianBlur(image, (21, 21), 0)
-    mask = np.zeros(image.shape, np.uint8)
-
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    thresh = cv2.threshold(gray, 60, 255, cv2.THRESH_BINARY)[1]
-    contours, hierarchy = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    cv2.drawContours(mask, contours, -1, (255, 255, 255), 5)
-    output = np.where(mask == np.array([255, 255, 255]), blurred_img, image)
-    return output
+def blur(img, bound_box):
+    """
+    Apply a variant of Gaussian blurring.
+    See the appendix for detail.
+    """
+    img = PIL.Image.fromarray(img)
+    mask = Image.new(mode="L", size=img.size, color="white")
+    max_diagonal = 0
+    for bbox in bound_box:
+        if bbox["x0"] >= bbox["x1"] or bbox["y0"] >= bbox["y1"]:
+            continue
+        diagonal = max(bbox["x1"] - bbox["x0"], bbox["y1"] - bbox["y0"])
+        max_diagonal = max(max_diagonal, diagonal)
+        bbox = [
+            bbox["x0"] - 0.1 * diagonal,
+            bbox["y0"] - 0.1 * diagonal,
+            bbox["x1"] + 0.1 * diagonal,
+            bbox["y1"] + 0.1 * diagonal,
+        ]
+        draw = ImageDraw.Draw(mask)
+        draw.rectangle(bbox, fill="black")
+    blurred_img = img.filter(ImageFilter.GaussianBlur(0.1 * max_diagonal))
+    blurred_mask = mask.filter(ImageFilter.GaussianBlur(0.1 * max_diagonal))
+    img = Image.composite(img, blurred_img, blurred_mask)
+    img.show()
+    return img
 
 
 def paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, result, scale_percent, src, tgt,
