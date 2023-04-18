@@ -139,7 +139,7 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
-def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None):
+def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None, src_mask=None):
     proc = EquProcessor(
         'max',
         'numpy',
@@ -163,10 +163,31 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None):
 
     choice_x, choice_y = random.choice(valid_points)
     # print(choice_x, choice_y)
+    x_0, y_0, x_1, y_1 = int(fst_bb_clone[0]), int(fst_bb_clone[1]), int(fst_bb_clone[2]), int(fst_bb_clone[3])
+    # x_end, y_end = choice_x + x_1 - x_0, choice_y + y_1 - y_0
+    # img = src[y_0:y_1, x_0:x_1]
+    # src_mask = src_mask[y_0:y_1, x_0:x_1]
     mask_on_tgt = (choice_y, choice_x)
-    mask = np.zeros([mask_y, mask_x], np.uint8) + 255
-    gui.proc.reset(gui.src, mask, gui.tgt, (int(fst_bb_clone[1]), int(fst_bb_clone[0])), mask_on_tgt)
+    # mask = np.zeros([mask_y, mask_x], np.uint8) + 255
+    mask_on_src = (int(fst_bb_clone[1]), int(fst_bb_clone[0]))
+    # mask_on_src = (int(fst_bb_clone[1]), int(fst_bb_clone[0]))
+    # mask_on_src = src_mask
+    src_mask = src_mask[y_0:y_1, x_0:x_1]
+    src_mask = cv2.cvtColor(src_mask, cv2.COLOR_BGR2GRAY)
+    _, src_mask = cv2.threshold(src_mask, 10, 255, cv2.THRESH_BINARY)
+    mask = np.zeros(src_mask.shape, np.uint8) + 255
+    # mask_inv = cv2.bitwise_not(mask_on_src)
+    # cv2.imshow('win', src_mask)
+    # cv2.waitKey(0)
+    # cv2.imshow('win2', mask_inv)
+    # cv2.waitKey(0)
+    # cv2.imshow('win3', mask_on_src)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    gui.proc.reset(gui.src, mask, gui.tgt, mask_on_src, mask_on_tgt)
     gui.gui_out, err = gui.proc.step(10000)
+    cv2.imshow('win', gui.gui_out)
+    cv2.waitKey(0)
     return gui.gui_out, choice_x, choice_y, scale_percent
 
 

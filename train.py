@@ -38,6 +38,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import dataloader
 from tqdm import tqdm
 
+import util
 from poisson_util import gui, io
 from utils import general
 
@@ -496,6 +497,9 @@ def generate_poisson_imgs(opt):
     img_per_folder = opt.img_per_folder
     obj_classes = list(map(lambda x: int(x), opt.obj_classes.split(',')))
 
+    jpeg_images_path = '../datasets/VOC/images/VOCdevkit/VOC2012/JPEGImages'
+    jpg_imgs = os.listdir(jpeg_images_path)
+
     split_to_img = {}
     split_to_label = {}
 
@@ -567,8 +571,29 @@ def generate_poisson_imgs(opt):
                 temp[0:] = tgt_lbl
                 tgt_lbl = temp
             rnd_img = random.choice(list(obj_samples.keys()))
-            src_img = gui.read_image(rnd_img)
-            src_lbl = obj_samples[rnd_img]
+            rnd_jpg_img = random.choice(jpg_imgs)
+            mask_path = '../datasets/VOC/images/VOCdevkit/VOC2012/SegmentationClass/' + rnd_jpg_img.replace('.jpg',
+                                                                                                            '.png')
+            while not os.path.exists(mask_path):
+                rnd_jpg_img = random.choice(jpg_imgs)
+                mask_path = '../datasets/VOC/images/VOCdevkit/VOC2012/SegmentationClass/' + rnd_jpg_img.replace('.jpg',
+                                                                                                                '.png')
+            mask = cv2.imread(mask_path)
+            src_img = io.read_image(os.path.join(jpeg_images_path, rnd_jpg_img))
+            src_lbl1 = None
+            old_imgs = ['train2007', 'val2007', 'test2007']
+            new_imgs = ['train2012', 'val2012']
+            src_lbl1 = get_masked_lbl(new_imgs, old_imgs, rnd_jpg_img, src_lbl1)
+            if src_lbl1 is None:
+                label_path = os.path.join('../datasets/VOC/images/VOCdevkit/VOC2012/Annotations')
+                labels_in_img = util.parse_annotations_and_return_true_boxes(
+                    os.path.join(label_path, rnd_jpg_img.replace('.jpg', '.xml')), src_img)
+                src_lbl1 = np.zeros((len(labels_in_img) + 1, 5))
+                for it, i in enumerate(labels_in_img):
+                    src_lbl1[it] = np.insert(i['bbox'], 0, i['name'])
+            src_lbl = src_lbl1[0] if len(src_lbl1.shape) > 1 else src_lbl1
+            # src_img = gui.read_image(rnd_img)
+            # src_lbl = obj_samples[rnd_img]
             bbs = general.xywhn2xyxy(src_lbl[1:], w=src_img.shape[1], h=src_img.shape[0])
 
             tgt_bbs = []
@@ -577,7 +602,7 @@ def generate_poisson_imgs(opt):
                 instance = tgt_lbl[iterable]
                 tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
             try:
-                poisson_img, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, bbs, tgt_bbs=tgt_bbs)
+                poisson_img, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, bbs, tgt_bbs=tgt_bbs, src_mask=mask)
                 bbs = (bbs * scale_factor) / 100
                 # snd_point = (int(choice_x + (bbs[2] - bbs[0])), int(choice_y + (bbs[3] - bbs[1])))
                 # color = (0, 0, 0)
@@ -602,6 +627,24 @@ def generate_poisson_imgs(opt):
             except ValueError:
                 LOGGER.info("Image {} could not be pasted onto {}".format(rnd_img, images + k + '/' + imgs[j]))
                 continue
+
+
+def get_masked_lbl(new_imgs, old_imgs, rnd_jpg_img, src_lbl1):
+    if rnd_jpg_img.startswith('2007_'):
+        old_img = rnd_jpg_img.split('_')[1].replace('.jpg', '.txt')
+        for old_im in old_imgs:
+            train_imgs = os.listdir('../datasets/VOC/labels/' + old_im)
+            if old_img in train_imgs:
+                src_lbl1 = np.loadtxt('../datasets/VOC/labels/' + old_im + '/' + old_img)
+                break
+    else:
+        for new_im in new_imgs:
+            train_imgs = os.listdir('../datasets/VOC/labels/' + new_im)
+            search_lbl = rnd_jpg_img.replace('.jpg', '.txt')
+            if search_lbl in train_imgs:
+                src_lbl1 = np.loadtxt('../datasets/VOC/labels/train2007/' + new_im + '.txt')
+                break
+    return src_lbl1
 
 
 def main(opt, callbacks=Callbacks()):
