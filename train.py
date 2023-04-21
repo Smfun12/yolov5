@@ -16,8 +16,6 @@ Tutorial:   https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data
 """
 
 import argparse
-
-import cv2
 import math
 import os
 import random
@@ -28,18 +26,17 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
-import numpy
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import yaml
 from torch.optim import lr_scheduler
-from torch.utils.data import dataloader
 from tqdm import tqdm
 
-import util
-from poisson_util import gui, io
+from cp_gan_util import cp_gan
+from cp_gan_util.cp_gan import create_mask
+from poisson_util import io, gui
 from utils import general
 
 FILE = Path(__file__).resolve()
@@ -446,7 +443,7 @@ def parse_opt(known=False):
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default=ROOT / 'data/VOC.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=50, help='total training epochs')
+    parser.add_argument('--epochs', type=int, default=100, help='total training epochs')
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
@@ -485,9 +482,9 @@ def parse_opt(known=False):
     parser.add_argument('--generate_poisson', type=bool, default=False, help="Generation of poisson images")
     parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
     parser.add_argument('--img_per_folder', type=int, default=1, help='Number of generated poisson images per folder')
-    parser.add_argument('--obj_classes', type=str, default='', help='Object classes to be generated')
-    return parser.parse_known_args()[0] if known else parser.parse_args()
+    parser.add_argument('--obj_classes', type=str, default='5,10', help='Object classes to be generated')
 
+    return parser.parse_known_args()[0] if known else parser.parse_args()
 
 def generate_poisson_imgs(opt):
     images = '../datasets/VOC/images/'
@@ -496,9 +493,6 @@ def generate_poisson_imgs(opt):
     lbls = os.listdir(label_folder)
     img_per_folder = opt.img_per_folder
     obj_classes = list(map(lambda x: int(x), opt.obj_classes.split(',')))
-
-    jpeg_images_path = '../datasets/VOC/images/VOCdevkit/VOC2012/JPEGImages'
-    jpg_imgs = os.listdir(jpeg_images_path)
 
     split_to_img = {}
     split_to_label = {}
@@ -533,7 +527,7 @@ def generate_poisson_imgs(opt):
         for i in range(0, len(imgs) - 1):
             if img_per_folder_exceeded:
                 break
-            src_lbl = numpy.loadtxt(label_folder + k + '/' + labels[i])
+            src_lbl = np.loadtxt(label_folder + k + '/' + labels[i])
 
             if len(src_lbl.shape) == 1:
                 temp = np.zeros((1, src_lbl.shape[0]))
@@ -545,14 +539,9 @@ def generate_poisson_imgs(opt):
                     found_class = idx
                     break
 
-            if len(src_lbl.shape) > 1 and not found_class:
-                src_lbl = src_lbl[0]
-            else:
-                src_lbl = src_lbl[found_class]
-            if int(src_lbl[0]) not in obj_classes:
+            if not found_class:
                 continue
-            else:
-                obj_samples[images + k + '/' + imgs[i]] = src_lbl
+            obj_samples[images + k + '/' + imgs[i]] = src_lbl
 
     for k in split_to_img.keys():
         imgs = split_to_img[k]
@@ -564,93 +553,75 @@ def generate_poisson_imgs(opt):
         for j in range(0, len(imgs)-1):
             if j == img_per_folder*len(obj_classes):
                 break
-            tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[j])
+            tgt_lbl = np.loadtxt(label_folder + k + '/' + labels[j])
             LOGGER.info('{} out of {}, limit {}'.format(j, len(imgs), img_per_folder*len(obj_classes)))
             if len(tgt_lbl.shape) == 1:
                 temp = np.zeros((1, tgt_lbl.shape[0]))
                 temp[0:] = tgt_lbl
                 tgt_lbl = temp
             rnd_img = random.choice(list(obj_samples.keys()))
-            rnd_jpg_img = random.choice(jpg_imgs)
-            mask_path = '../datasets/VOC/images/VOCdevkit/VOC2012/SegmentationClass/' + rnd_jpg_img.replace('.jpg',
-                                                                                                            '.png')
-            while not os.path.exists(mask_path):
-                rnd_jpg_img = random.choice(jpg_imgs)
-                mask_path = '../datasets/VOC/images/VOCdevkit/VOC2012/SegmentationClass/' + rnd_jpg_img.replace('.jpg',
-                                                                                                                '.png')
-            mask = cv2.imread(mask_path)
-            src_img = io.read_image(os.path.join(jpeg_images_path, rnd_jpg_img))
-            src_lbl1 = None
-            old_imgs = ['train2007', 'val2007', 'test2007']
-            new_imgs = ['train2012', 'val2012']
-            src_lbl1 = get_masked_lbl(new_imgs, old_imgs, rnd_jpg_img, src_lbl1)
-            if src_lbl1 is None:
-                label_path = os.path.join('../datasets/VOC/images/VOCdevkit/VOC2012/Annotations')
-                labels_in_img = util.parse_annotations_and_return_true_boxes(
-                    os.path.join(label_path, rnd_jpg_img.replace('.jpg', '.xml')), src_img)
-                src_lbl1 = np.zeros((len(labels_in_img) + 1, 5))
-                for it, i in enumerate(labels_in_img):
-                    src_lbl1[it] = np.insert(i['bbox'], 0, i['name'])
-            src_lbl = src_lbl1[0] if len(src_lbl1.shape) > 1 else src_lbl1
-            # src_img = gui.read_image(rnd_img)
-            # src_lbl = obj_samples[rnd_img]
-            bbs = general.xywhn2xyxy(src_lbl[1:], w=src_img.shape[1], h=src_img.shape[0])
-
+            img = io.read_image(rnd_img)
+            src_img = rnd_img
+            src_lbl = obj_samples[rnd_img]
+            bbs = []
+            for sr_lb in src_lbl:
+                bbs.append((sr_lb[0],general.xywhn2xyxy(sr_lb[1:], w=img.shape[1], h=img.shape[0])))
+            # bbs = general.xywhn2xyxy(src_lbl[1:], w=img.shape[1], h=img.shape[0])
+            src_img, new_dim = cp_gan.reduce_size(src_img)
+            new_img_shape = (img.shape[1] // 64, img.shape[0] // 64)
+            for bb in range(len(bbs)):
+                temp = bbs[bb][1]
+                temp = temp[0] // new_img_shape[0], temp[1] // new_img_shape[1], temp[2] // new_img_shape[0], temp[3] // new_img_shape[1]
+                bbs[bb] = (bbs[bb][0], temp)
+            # bbs[0], bbs[1], bbs[2], bbs[3] = bbs[0] // new_img_shape[0], bbs[1] // new_img_shape[1], bbs[2] // new_img_shape[0], bbs[3] // new_img_shape[1]
             tgt_bbs = []
-            tgt_img = gui.read_image(images + k + '/' + imgs[j])
+            tgt_img = io.read_image(images + k + '/' + imgs[j])
             for iterable in range(len(tgt_lbl)):
                 instance = tgt_lbl[iterable]
                 tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
             try:
-                poisson_img, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, bbs, tgt_bbs=tgt_bbs, src_mask=mask)
-                bbs = (bbs * scale_factor) / 100
-                # snd_point = (int(choice_x + (bbs[2] - bbs[0])), int(choice_y + (bbs[3] - bbs[1])))
-                # color = (0, 0, 0)
-                # cv2.rectangle(poisson_img, stt_point, snd_point, color, 3)
-                # for j in range(len(tgt_bbs)):
-                #     cv2.rectangle(poisson_img, (int(tgt_bbs[j][0]), int(tgt_bbs[j][1])), (int(tgt_bbs[j][2]), int(tgt_bbs[j][3])), color, 3)
-                # cv2.imshow('win', poisson_img)
-                # cv2.waitKey()
-                coordinates = np.asarray([choice_x, choice_y, choice_x + bbs[2] - bbs[0], choice_y + bbs[3] - bbs[1]])
-                y_output = general.xyxy2xywhn(coordinates, w=poisson_img.shape[1], h=poisson_img.shape[0])
-                y_output = np.insert(y_output, 0, src_lbl[0])
+                img_shape = [0, 0, 64, 64]
+                mask = create_mask(rnd_img)
+                mask = (mask * 255).round().astype(np.uint8)
+                naive_cp, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, img_shape, tgt_bbs=tgt_bbs, mask=mask)
+                # bbs = (bbs * scale_factor) / 100
+                ccds = []
+                for i in bbs:
+                    class_idx = i[0]
+                    bbox = i[1]
+                    assert bbox[0] < choice_x + 64
+                    assert bbox[1] < choice_y + 64
+                    ccds.append(np.asarray([[class_idx, bbox[0]+choice_x, bbox[1]+choice_y, choice_x + bbox[2] - bbox[0],
+                                             choice_y + bbox[3] - bbox[1]]]))
+                # coordinates = np.asarray([choice_x, choice_y, choice_x + bbs[2] - bbs[0], choice_y + bbs[3] - bbs[1]])
+                y_outputs = []
+                for coordinate in ccds:
+                    xywhn = general.xyxy2xywhn(coordinate[0][1:], w=naive_cp.shape[1], h=naive_cp.shape[0])
+                    y_outputs.append(np.insert(xywhn, 0, coordinate[0][0]))
+                # y_output = np.insert(y_output, 0, src_lbl[0])
                 img = str(int(imgs[-1].split('.')[0]) + 1) + '.jpg'
                 lbl = str(int(labels[-1].split('.')[0]) + 1) + '.txt'
                 imgs.append(img)
                 labels.append(lbl)
-                conc_label = numpy.zeros((tgt_lbl.shape[0] + 1, tgt_lbl.shape[1]))
+                conc_label = np.zeros((tgt_lbl.shape[0] + len(y_outputs), tgt_lbl.shape[1]))
                 conc_label[0:tgt_lbl.shape[0]] = tgt_lbl[:]
-                conc_label[-1] = y_output
-                io.write_image(images + k + '/' + img, poisson_img)
-                numpy.savetxt(label_folder + k + '/' + lbl, X=conc_label)
+                for idx, y_output in enumerate(y_outputs):
+                    if idx == len(conc_label) - 1:
+                        break
+                    conc_label[idx+1] = y_output
+                io.write_image(images + k + '/' + img, naive_cp)
+                np.savetxt(label_folder + k + '/' + lbl, X=conc_label)
                 LOGGER.info("Created new image {}".format(images + k + '/' + img))
             except ValueError:
                 LOGGER.info("Image {} could not be pasted onto {}".format(rnd_img, images + k + '/' + imgs[j]))
                 continue
 
 
-def get_masked_lbl(new_imgs, old_imgs, rnd_jpg_img, src_lbl1):
-    if rnd_jpg_img.startswith('2007_'):
-        old_img = rnd_jpg_img.split('_')[1].replace('.jpg', '.txt')
-        for old_im in old_imgs:
-            train_imgs = os.listdir('../datasets/VOC/labels/' + old_im)
-            if old_img in train_imgs:
-                src_lbl1 = np.loadtxt('../datasets/VOC/labels/' + old_im + '/' + old_img)
-                break
-    else:
-        for new_im in new_imgs:
-            train_imgs = os.listdir('../datasets/VOC/labels/' + new_im)
-            search_lbl = rnd_jpg_img.replace('.jpg', '.txt')
-            if search_lbl in train_imgs:
-                src_lbl1 = np.loadtxt('../datasets/VOC/labels/train2007/' + new_im + '.txt')
-                break
-    return src_lbl1
-
 
 def main(opt, callbacks=Callbacks()):
+    # Checks
     if opt.generate_poisson:
         generate_poisson_imgs(opt)
-    # Checks
     if RANK in {-1, 0}:
         print_args(vars(opt))
         check_git_status()
