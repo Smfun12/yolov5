@@ -16,6 +16,8 @@ Tutorial:   https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data
 """
 
 import argparse
+
+import cv2
 import math
 import os
 import random
@@ -590,10 +592,16 @@ def generate_poisson_imgs(opt):
                 for i in bbs:
                     class_idx = i[0]
                     bbox = i[1]
-                    assert bbox[0] < choice_x + 64
-                    assert bbox[1] < choice_y + 64
-                    ccds.append(np.asarray([[class_idx, bbox[0]+choice_x, bbox[1]+choice_y, choice_x + bbox[2] - bbox[0],
-                                             choice_y + bbox[3] - bbox[1]]]))
+                    # if bbox[0] > choice_x + 64:
+                    # start_point = (int(bbox[0]+choice_x), int(bbox[1]+choice_y))
+                    # end_point = (int(choice_x + bbox[2]), int(choice_y + bbox[3]))
+                    # color = (255, 0, 0)
+                    # thickness = 1
+                    # image = cv2.rectangle(naive_cp, start_point, end_point, color, thickness)
+                    # cv2.imshow('win', image)
+                    # cv2.waitKey(0)
+                    ccds.append(np.asarray([[class_idx, bbox[0]+choice_x, bbox[1]+choice_y, choice_x + bbox[2],
+                                             choice_y+bbox[3]]]))
                 # coordinates = np.asarray([choice_x, choice_y, choice_x + bbs[2] - bbs[0], choice_y + bbs[3] - bbs[1]])
                 y_outputs = []
                 for coordinate in ccds:
