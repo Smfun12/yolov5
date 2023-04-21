@@ -179,7 +179,7 @@ def paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc, result, scale_p
                  tgt_bbs, valid_points):
     while len(valid_points) == 0:
         scale_percent -= 5
-        if scale_percent < 50:
+        if scale_percent < 100:
             raise ValueError
         gui = GUI(proc, src, tgt, result, 100, scale_percent=scale_percent)
         fst_bb_clone = fst_bb * (scale_percent // 100)

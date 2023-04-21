@@ -576,6 +576,7 @@ def generate_poisson_imgs(opt):
             # bbs[0], bbs[1], bbs[2], bbs[3] = bbs[0] // new_img_shape[0], bbs[1] // new_img_shape[1], bbs[2] // new_img_shape[0], bbs[3] // new_img_shape[1]
             tgt_bbs = []
             tgt_img = io.read_image(images + k + '/' + imgs[j])
+            LOGGER.info("Processing images: src={}, tgt={}".format(rnd_img, images + k + '/' + imgs[j]))
             for iterable in range(len(tgt_lbl)):
                 instance = tgt_lbl[iterable]
                 tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
