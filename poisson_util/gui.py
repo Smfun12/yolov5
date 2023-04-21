@@ -155,10 +155,9 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None, mask=None):
     valid_points = []
     gui = None
     mask_x, mask_y = None, None
-    increase_overlap = False
     scale_percent = 105
     overlap_per = 0.05
-    fst_bb_clone, gui, mask_x, mask_y, scale_percent = paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc,
+    fst_bb_clone, gui, mask_x, mask_y, scale_percent = paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc,
                                                                     result, scale_percent, src, tgt, tgt_bbs, valid_points)
 
     img_clone = src
@@ -171,12 +170,12 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None, mask=None):
 
     dst = cv2.add(img1_bg, img2_fg)
     tgt[choice_y:choice_y+64, choice_x:choice_x+64] = dst
-    cv2.imshow('win', tgt)
-    cv2.waitKey(0)
+    # cv2.imshow('win', tgt)
+    # cv2.waitKey(0)
     return tgt, choice_x, choice_y, scale_percent
 
 
-def paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, proc, result, scale_percent, src, tgt,
+def paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc, result, scale_percent, src, tgt,
                  tgt_bbs, valid_points):
     while len(valid_points) == 0:
         scale_percent -= 5
@@ -221,9 +220,6 @@ def paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, pro
                         square = (min(x_max_tgt_bb, x_max_src_bb) - max(x_min_tgt_bb, x_min_src_bb)) * (y_max_src_bb - y_min_tgt_bb) / (
                                     (x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
                         intersections.append(abs(square))
-                if increase_overlap:
-                    overlap_per += min(1.0, increase_overlap + 0.05)
-                    increase_overlap = False
                 if sum(intersections) / max(1, len(intersections)) >= overlap_per:
                     can_add = False
                 if can_add and (i + mask_x < gui.tgt.shape[1]) and (j + mask_y < gui.tgt.shape[0]):
