@@ -559,7 +559,9 @@ def generate_poisson_imgs(opt):
         labels = [i for i in labels if i.endswith('.txt')]
         LOGGER.info('Processing {}'.format(k))
 
-        for j in range(0, len(imgs)-1):
+        j = 0
+        failure_attempts = 0
+        while j < len(imgs):
             if j == img_per_folder*len(obj_classes):
                 break
             tgt_lbl = np.loadtxt(label_folder + k + '/' + labels[j])
@@ -594,12 +596,21 @@ def generate_poisson_imgs(opt):
 
             tgt_bbs = []
             tgt_img = io.read_image(images + k + '/' + imgs[j])
+            LOGGER.info("Processing images: src={}, tgt={}".format(rnd_img, images + k + '/' + imgs[j]))
             for iterable in range(len(tgt_lbl)):
                 instance = tgt_lbl[iterable]
                 tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
             try:
                 naive_cp, choice_x, choice_y, scale_factor = gui.naive_copy_paste_img(src_img, tgt_img, bbs, tgt_bbs=tgt_bbs,mask=mask)
+                # stt_point = (int(choice_x), int(choice_y))
                 bbs = (bbs * scale_factor) / 100
+                # snd_point = (int(choice_x + (bbs[2] - bbs[0])), int(choice_y + (bbs[3] - bbs[1])))
+                # color = (0, 0, 0)
+                # cv2.rectangle(naive_cp, stt_point, snd_point, color, 3)
+                # for j in range(len(tgt_bbs)):
+                #     cv2.rectangle(naive_cp, (int(tgt_bbs[j][0]), int(tgt_bbs[j][1])), (int(tgt_bbs[j][2]), int(tgt_bbs[j][3])), color, 3)
+                # cv2.imshow('win', naive_cp)
+                # cv2.waitKey()
                 coordinates = np.asarray([choice_x, choice_y, choice_x + bbs[2] - bbs[0], choice_y + bbs[3] - bbs[1]])
                 y_output = general.xyxy2xywhn(coordinates, w=naive_cp.shape[1], h=naive_cp.shape[0])
                 y_output = np.insert(y_output, 0, src_lbl[0])
@@ -613,7 +624,14 @@ def generate_poisson_imgs(opt):
                 io.write_image(images + k + '/' + img, naive_cp)
                 np.savetxt(label_folder + k + '/' + lbl, X=conc_label)
                 LOGGER.info("Created new image {}".format(images + k + '/' + img))
+                j += 1
             except ValueError:
+                failure_attempts += 1
+                if failure_attempts >= 3:
+                    LOGGER.info("Failure to paste 3 images onto {}. Continue to next image...".format(
+                        images + k + '/' + imgs[j]))
+                    failure_attempts = 0
+                    j += 1
                 LOGGER.info("Image {} could not be pasted onto {}".format(rnd_img, images + k + '/' + imgs[j]))
                 continue
 
