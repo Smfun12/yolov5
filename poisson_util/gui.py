@@ -59,7 +59,7 @@ def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
     increase_overlap = False
     scale_percent = 105
     overlap_per = 0.05
-    fst_bb_clone, gui, mask_x, mask_y, scale_percent = paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y,
+    fst_bb_clone, gui, _, _, scale_percent = paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y,
                                                                     overlap_per,
                                                                     result, scale_percent, src, tgt, tgt_bbs,
                                                                     valid_points)
@@ -67,7 +67,7 @@ def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
     choice_x, choice_y = random.choice(valid_points)
     x_0,y_0,x_1,y_1 = int(fst_bb_clone[0]),int(fst_bb_clone[1]),int(fst_bb_clone[2]),int(fst_bb_clone[3])
     x_end,y_end = choice_x+x_1-x_0, choice_y+y_1-y_0
-    img = src[y_0:y_1, x_0:x_1]
+    img = gui.src[y_0:y_1, x_0:x_1]
     # cv2.imshow('win', img)
     # cv2.waitKey()
     tgt[choice_y:y_end, choice_x:x_end] = img
