@@ -2,9 +2,9 @@ import random
 
 import PIL
 import cv2
+import numpy
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
-
 from poisson_util.io import write_image
 
 
@@ -61,57 +61,48 @@ def naive_copy_paste_img(src, tgt, fst_bb, tgt_bbs, result=None):
     increase_overlap = False
     scale_percent = 105
     overlap_per = 0.05
-    fst_bb_clone, gui, mask_x, mask_y, scale_percent = paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y,
+    padding = 10
+    fst_bb_clone, gui, _, _, scale_percent = paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y,
                                                                     overlap_per,
                                                                     result, scale_percent, src, tgt, tgt_bbs,
-                                                                    valid_points)
-
+                                                                    valid_points, padding)
+    # Points on tgt
     choice_x, choice_y = random.choice(valid_points)
-    x_0,y_0,x_1,y_1 = int(fst_bb_clone[0]),int(fst_bb_clone[1]),int(fst_bb_clone[2]),int(fst_bb_clone[3])
-    x_end,y_end = choice_x+x_1-x_0, choice_y+y_1-y_0
-    img = src[y_0:y_1, x_0:x_1]
-    # img = blur(img)
-    # cv2.imshow('win', img)
-    # cv2.waitKey()
-    bbox_dict = [{'x0':fst_bb_clone[0], 'y0': fst_bb_clone[1], 'x1': fst_bb_clone[2], 'y1': fst_bb_clone[3]}]
-    tgt[choice_y:y_end, choice_x:x_end] = np.array(blur(img,bbox_dict))
-    # tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2] = blur(tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2], bbox_dict)
-    # tgt[max(choice_y-2,0):y_end+2, max(choice_x-2,0):x_end+2] = blur(img, bbox_dict)
-    cv2.imshow('win', tgt)
-    cv2.waitKey(0)
-    return tgt, choice_x, choice_y, scale_percent
 
+    bbox_x0 = max(0, int(fst_bb_clone[0])-2*padding)
+    bbox_y0 = max(0, int(fst_bb_clone[1])-2*padding)
+    bbox_x1 = min(gui.src.shape[1], int(fst_bb_clone[2])+2*padding)
+    bbox_y1 = min(gui.src.shape[0], int(fst_bb_clone[3])+2*padding)
+    width, height = choice_x + int(bbox_x1 - bbox_x0), choice_y + int(bbox_y1 - bbox_y0)
 
-def blur(img, bound_box):
-    """
-    Apply a variant of Gaussian blurring.
-    See the appendix for detail.
-    """
-    img = PIL.Image.fromarray(img)
-    mask = Image.new(mode="L", size=img.size, color="white")
-    max_diagonal = 0
-    for bbox in bound_box:
-        if bbox["x0"] >= bbox["x1"] or bbox["y0"] >= bbox["y1"]:
-            continue
-        diagonal = max(bbox["x1"] - bbox["x0"], bbox["y1"] - bbox["y0"])
-        max_diagonal = max(max_diagonal, diagonal)
-        bbox = [
-            bbox["x0"] - 0.1 * diagonal,
-            bbox["y0"] - 0.1 * diagonal,
-            bbox["x1"] + 0.1 * diagonal,
-            bbox["y1"] + 0.1 * diagonal,
-        ]
-        draw = ImageDraw.Draw(mask)
-        draw.rectangle(bbox, fill="black")
-    blurred_img = img.filter(ImageFilter.GaussianBlur(0.1 * max_diagonal))
-    blurred_mask = mask.filter(ImageFilter.GaussianBlur(0.1 * max_diagonal))
-    img = Image.composite(img, blurred_img, blurred_mask)
-    img.show()
-    return img
+    # Src
+    src_pil = Image.fromarray(gui.src)
+    # draw_mask_on_src = ImageDraw.Draw(src_pil)
+    # draw_mask_on_src.rectangle(((bbox_x0, bbox_y0), (bbox_x1, bbox_y1)))
+    src_pil_copy = src_pil.copy()
+    src_pil_copy = src_pil_copy.crop((bbox_x0, bbox_y0, bbox_x1, bbox_y1))
+    # Mask
+    mask_im = Image.new("L", src_pil.size, 0)
+    draw_mask = ImageDraw.Draw(mask_im)
+    draw_mask.rectangle(((bbox_x0+padding, bbox_y0+padding), (bbox_x1-padding, bbox_y1-padding)), fill=255)
+    mask_im_blur = mask_im.filter(ImageFilter.GaussianBlur(5))
+    mask_im_blur_copy = mask_im_blur.copy()
+    mask_im_blur_copy = mask_im_blur_copy.crop((bbox_x0, bbox_y0, bbox_x1, bbox_y1))
+    # Tgt
+    tgt_pil = Image.fromarray(tgt)
+    # draw_mask_on_tgt = ImageDraw.Draw(tgt_pil)
+    # draw_mask_on_tgt.rectangle(((choice_x, choice_y), (width, height)))
+    tgt_copy = tgt_pil.copy()
+    tgt_copy.paste(src_pil_copy, (choice_x, choice_y, width, height), mask_im_blur_copy)
+
+    # Convert Pil to cv2
+    tgt = np.array(tgt_copy)
+
+    return tgt, choice_x+padding, choice_y+padding, scale_percent
 
 
 def paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, result, scale_percent, src, tgt,
-                 tgt_bbs, valid_points):
+                 tgt_bbs, valid_points, padding):
     while len(valid_points) == 0:
         scale_percent -= 5
         if scale_percent < 50:
@@ -127,8 +118,8 @@ def paste_object(fst_bb, gui, increase_overlap, mask_x, mask_y, overlap_per, res
 
         for i in range(gui.tgt.shape[1]):
             for j in range(gui.tgt.shape[0]):
-                x_min_src_bb, y_min_src_bb, x_max_src_bb, y_max_src_bb = i, j, min(i + mask_x, gui.tgt.shape[1]), min(
-                    j + mask_y, gui.tgt.shape[0])
+                x_min_src_bb, y_min_src_bb, x_max_src_bb, y_max_src_bb = max(0, i-padding), max(0,j-padding), min(i + mask_x+padding, gui.tgt.shape[1]), min(
+                    j + mask_y+padding, gui.tgt.shape[0])
                 intersections = []
                 can_add = True
                 for tgt_bb in tgt_bbs:
