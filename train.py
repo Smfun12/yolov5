@@ -557,7 +557,9 @@ def generate_poisson_imgs(opt):
         labels = [i for i in labels if i.endswith('.txt')]
         LOGGER.info('Processing {}'.format(k))
 
-        for j in range(0, len(imgs)-1):
+        j = 0
+        failure_attempts = 0
+        while j < len(imgs):
             if j == img_per_folder*len(obj_classes):
                 break
             tgt_lbl = numpy.loadtxt(label_folder + k + '/' + labels[j])
@@ -573,12 +575,14 @@ def generate_poisson_imgs(opt):
 
             tgt_bbs = []
             tgt_img = gui.read_image(images + k + '/' + imgs[j])
+            LOGGER.info("Processing images: src={}, tgt={}".format(rnd_img, images + k + '/' + imgs[j]))
             for iterable in range(len(tgt_lbl)):
                 instance = tgt_lbl[iterable]
                 tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
             try:
                 poisson_img, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, bbs, tgt_bbs=tgt_bbs)
                 bbs = (bbs * scale_factor) / 100
+                # stt_point = (int(choice_x), int(choice_y))
                 # snd_point = (int(choice_x + (bbs[2] - bbs[0])), int(choice_y + (bbs[3] - bbs[1])))
                 # color = (0, 0, 0)
                 # cv2.rectangle(poisson_img, stt_point, snd_point, color, 3)
@@ -599,7 +603,14 @@ def generate_poisson_imgs(opt):
                 io.write_image(images + k + '/' + img, poisson_img)
                 numpy.savetxt(label_folder + k + '/' + lbl, X=conc_label)
                 LOGGER.info("Created new image {}".format(images + k + '/' + img))
+                j += 1
             except ValueError:
+                failure_attempts += 1
+                if failure_attempts >= 3:
+                    LOGGER.info("Failure to paste 3 images onto {}. Continue to next image...".format(
+                        images + k + '/' + imgs[j]))
+                    failure_attempts = 0
+                    j += 1
                 LOGGER.info("Image {} could not be pasted onto {}".format(rnd_img, images + k + '/' + imgs[j]))
                 continue
 
