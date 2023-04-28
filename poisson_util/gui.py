@@ -5,6 +5,7 @@ from typing import Any
 import cv2
 import numpy as np
 
+from cp_gan_util.cp_gan import create_mask
 from poisson_util.io import read_image, write_image
 from poisson_util.args import get_args
 from poisson_util.io import write_image
@@ -139,7 +140,7 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
-def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None, mask=None):
+def create_poisson_img(src, tgt, fst_bb, tgt_bbs, mask_size, result=None):
     proc = EquProcessor(
         'max',
         'numpy',
@@ -160,18 +161,19 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, result=None, mask=None):
     fst_bb_clone, gui, mask_x, mask_y, scale_percent = paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc,
                                                                     result, scale_percent, src, tgt, tgt_bbs, valid_points)
 
-    img_clone = src
+    img_clone = gui.src.copy()
+    width, height = fst_bb[2]-fst_bb[0], fst_bb[3]-fst_bb[1]
+    mask = create_mask(img_clone, mask_size)
+    mask = (mask * 255).round().astype(np.uint8)
     choice_x, choice_y = random.choice(valid_points)
-    roi = tgt[choice_y:choice_y+64, choice_x:choice_x+64]
+    roi = tgt[choice_y:choice_y+height, choice_x:choice_x+width]
     _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
     mask_inv = cv2.bitwise_not(mask)
     img1_bg = cv2.bitwise_and(roi, roi, mask=mask_inv)
     img2_fg = cv2.bitwise_and(img_clone, img_clone, mask=mask)
 
     dst = cv2.add(img1_bg, img2_fg)
-    tgt[choice_y:choice_y+64, choice_x:choice_x+64] = dst
-    # cv2.imshow('win', tgt)
-    # cv2.waitKey(0)
+    tgt[choice_y:choice_y+height, choice_x:choice_x+width] = dst
     return tgt, choice_x, choice_y, scale_percent
 
 

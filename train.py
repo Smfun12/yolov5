@@ -37,7 +37,6 @@ from torch.optim import lr_scheduler
 from tqdm import tqdm
 
 from cp_gan_util import cp_gan
-from cp_gan_util.cp_gan import create_mask
 from poisson_util import io, gui
 from utils import general
 
@@ -552,7 +551,9 @@ def generate_poisson_imgs(opt):
         labels = [i for i in labels if i.endswith('.txt')]
         LOGGER.info('Processing {}'.format(k))
 
-        for j in range(0, len(imgs)-1):
+        j = 0
+        failure_attempts = 0
+        while j < len(imgs):
             if j == img_per_folder*len(obj_classes):
                 break
             tgt_lbl = np.loadtxt(label_folder + k + '/' + labels[j])
@@ -566,16 +567,40 @@ def generate_poisson_imgs(opt):
             src_img = rnd_img
             src_lbl = obj_samples[rnd_img]
             bbs = []
+            # src_img_clone = io.read_image(src_img)
             for sr_lb in src_lbl:
                 bbs.append((sr_lb[0],general.xywhn2xyxy(sr_lb[1:], w=img.shape[1], h=img.shape[0])))
             # bbs = general.xywhn2xyxy(src_lbl[1:], w=img.shape[1], h=img.shape[0])
-            src_img, new_dim = cp_gan.reduce_size(src_img)
-            new_img_shape = (img.shape[1] // 64, img.shape[0] // 64)
-            for bb in range(len(bbs)):
-                temp = bbs[bb][1]
-                temp = temp[0] // new_img_shape[0], temp[1] // new_img_shape[1], temp[2] // new_img_shape[0], temp[3] // new_img_shape[1]
-                bbs[bb] = (bbs[bb][0], temp)
+            src_img, new_dim = cp_gan.reduce_size(src_img, opt.mask_size)
+            # src_img_resized_copy = src_img.copy()
+            new_img_shape = (img.shape[1] / new_dim[1], img.shape[0] / new_dim[0])
+            # bbs_copy = bbs.copy()
+            for i in range(len(bbs)):
+                bbox = bbs[i][1]
+                bbox = bbox[0] / new_img_shape[0], bbox[1] / new_img_shape[1], bbox[2] / new_img_shape[0], bbox[3] / new_img_shape[1]
+                bbs[i] = (bbs[i][0], bbox)
             # bbs[0], bbs[1], bbs[2], bbs[3] = bbs[0] // new_img_shape[0], bbs[1] // new_img_shape[1], bbs[2] // new_img_shape[0], bbs[3] // new_img_shape[1]
+            #     # draw original bboxes
+            # for i in bbs_copy:
+            #     bbox = i[1]
+            #     start_point = (int(bbox[0]), int(bbox[1]))
+            #     end_point = (int(bbox[2]), int(bbox[3]))
+            #     color = (255, 0, 0)
+            #     thickness = 1
+            #     image = cv2.rectangle(src_img_clone, start_point, end_point, color, thickness)
+            #     cv2.imshow('win', image)
+            #     cv2.waitKey(0)
+            #     # draw resized bboxes
+            # for i in bbs:
+            #     bbox = i[1]
+            #     start_point = (int(bbox[0]), int(bbox[1]))
+            #     end_point = (int(bbox[2]), int(bbox[3]))
+            #     color = (255, 0, 0)
+            #     thickness = 1
+            #     image = cv2.rectangle(src_img_resized_copy, start_point, end_point, color, thickness)
+            #     cv2.imshow('win', image)
+            #     cv2.waitKey(0)
+            # cv2.destroyAllWindows()
             tgt_bbs = []
             tgt_img = io.read_image(images + k + '/' + imgs[j])
             LOGGER.info("Processing images: src={}, tgt={}".format(rnd_img, images + k + '/' + imgs[j]))
@@ -583,17 +608,17 @@ def generate_poisson_imgs(opt):
                 instance = tgt_lbl[iterable]
                 tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
             try:
-                img_shape = [0, 0, 64, 64]
-                mask = create_mask(rnd_img)
-                mask = (mask * 255).round().astype(np.uint8)
-                naive_cp, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, img_shape, tgt_bbs=tgt_bbs, mask=mask)
+                img_shape = [0, 0, opt.mask_size[0], opt.mask_size[1]]
+                naive_cp, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, img_shape, tgt_bbs=tgt_bbs, mask_size=opt.mask_size)
                 # bbs = (bbs * scale_factor) / 100
+                # cv2.imshow('win', naive_cp)
+                # cv2.waitKey(0)
                 ccds = []
+                # draw bboxes
                 for i in bbs:
                     class_idx = i[0]
                     bbox = i[1]
-                    # if bbox[0] > choice_x + 64:
-                    # start_point = (int(bbox[0]+choice_x), int(bbox[1]+choice_y))
+                    # start_point = (int(bbox[0] + choice_x), int(bbox[1] + choice_y))
                     # end_point = (int(choice_x + bbox[2]), int(choice_y + bbox[3]))
                     # color = (255, 0, 0)
                     # thickness = 1
@@ -621,7 +646,14 @@ def generate_poisson_imgs(opt):
                 io.write_image(images + k + '/' + img, naive_cp)
                 np.savetxt(label_folder + k + '/' + lbl, X=conc_label)
                 LOGGER.info("Created new image {}".format(images + k + '/' + img))
+                j += 1
             except ValueError:
+                failure_attempts += 1
+                if failure_attempts >= 3:
+                    LOGGER.info("Failure to paste 3 images onto {}. Continue to next image...".format(
+                        images + k + '/' + imgs[j]))
+                    failure_attempts = 0
+                    j += 1
                 LOGGER.info("Image {} could not be pasted onto {}".format(rnd_img, images + k + '/' + imgs[j]))
                 continue
 
