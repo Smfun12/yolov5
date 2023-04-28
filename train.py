@@ -484,9 +484,10 @@ def parse_opt(known=False):
     parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
     parser.add_argument('--img_per_folder', type=int, default=1, help='Number of generated poisson images per folder')
     parser.add_argument('--obj_classes', type=str, default='5,10', help='Object classes to be generated')
-    parser.add_argument('--mask_size', type=tuple, default=(64, 64), help='Mask size for gan')
+    parser.add_argument('--mask_size', type=str, default='64,64', help='Mask size for gan')
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
+
 
 def generate_poisson_imgs(opt):
     images = '../datasets/VOC/images/'
@@ -494,6 +495,7 @@ def generate_poisson_imgs(opt):
     label_folder = '../datasets/VOC/labels/'
     lbls = os.listdir(label_folder)
     img_per_folder = opt.img_per_folder
+    mask_size = eval(opt.mask_size)
     obj_classes = list(map(lambda x: int(x), opt.obj_classes.split(',')))
 
     split_to_img = {}
@@ -572,7 +574,7 @@ def generate_poisson_imgs(opt):
             for sr_lb in src_lbl:
                 bbs.append((sr_lb[0],general.xywhn2xyxy(sr_lb[1:], w=img.shape[1], h=img.shape[0])))
             # bbs = general.xywhn2xyxy(src_lbl[1:], w=img.shape[1], h=img.shape[0])
-            src_img, new_dim = cp_gan.reduce_size(src_img, opt.mask_size)
+            src_img, new_dim = cp_gan.reduce_size(src_img, mask_size)
             # src_img_resized_copy = src_img.copy()
             new_img_shape = (img.shape[1] / new_dim[1], img.shape[0] / new_dim[0])
             # bbs_copy = bbs.copy()
@@ -609,8 +611,8 @@ def generate_poisson_imgs(opt):
                 instance = tgt_lbl[iterable]
                 tgt_bbs.append(general.xywhn2xyxy(instance[1:], w=tgt_img.shape[1], h=tgt_img.shape[0]))
             try:
-                img_shape = [0, 0, opt.mask_size[0], opt.mask_size[1]]
-                naive_cp, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, img_shape, tgt_bbs=tgt_bbs, mask_size=opt.mask_size)
+                img_shape = [0, 0, mask_size[0], mask_size[1]]
+                naive_cp, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, img_shape, tgt_bbs=tgt_bbs, mask_size=mask_size)
                 # bbs = (bbs * scale_factor) / 100
                 # cv2.imshow('win', naive_cp)
                 # cv2.waitKey(0)
