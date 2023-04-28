@@ -484,6 +484,7 @@ def parse_opt(known=False):
     parser.add_argument('--poisson_images', type=int, default=100, help='Number of generated poisson images')
     parser.add_argument('--img_per_folder', type=int, default=1, help='Number of generated poisson images per folder')
     parser.add_argument('--obj_classes', type=str, default='5,10', help='Object classes to be generated')
+    parser.add_argument('--mask_size', type=tuple, default=(64, 64), help='Mask size for gan')
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
