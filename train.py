@@ -633,7 +633,7 @@ def generate_poisson_imgs(opt):
                 for idx, y_output in enumerate(y_outputs):
                     if idx == len(conc_label) - 1:
                         break
-                    conc_label[idx+1] = y_output
+                    conc_label[idx+tgt_lbl.shape[0]] = y_output
                 io.write_image(images + k + '/' + img, naive_cp)
                 np.savetxt(label_folder + k + '/' + lbl, X=conc_label)
                 LOGGER.info("Created new image {}".format(images + k + '/' + img))
