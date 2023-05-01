@@ -613,29 +613,17 @@ def generate_poisson_imgs(opt):
             try:
                 img_shape = [0, 0, mask_size[0], mask_size[1]]
                 naive_cp, choice_x, choice_y, scale_factor = gui.create_poisson_img(src_img, tgt_img, img_shape, tgt_bbs=tgt_bbs, mask_size=mask_size)
-                # bbs = (bbs * scale_factor) / 100
-                # cv2.imshow('win', naive_cp)
-                # cv2.waitKey(0)
                 ccds = []
                 # draw bboxes
                 for i in bbs:
                     class_idx = i[0]
                     bbox = i[1]
-                    # start_point = (int(bbox[0] + choice_x), int(bbox[1] + choice_y))
-                    # end_point = (int(choice_x + bbox[2]), int(choice_y + bbox[3]))
-                    # color = (255, 0, 0)
-                    # thickness = 1
-                    # image = cv2.rectangle(naive_cp, start_point, end_point, color, thickness)
-                    # cv2.imshow('win', image)
-                    # cv2.waitKey(0)
                     ccds.append(np.asarray([[class_idx, bbox[0]+choice_x, bbox[1]+choice_y, choice_x + bbox[2],
                                              choice_y+bbox[3]]]))
-                # coordinates = np.asarray([choice_x, choice_y, choice_x + bbs[2] - bbs[0], choice_y + bbs[3] - bbs[1]])
                 y_outputs = []
                 for coordinate in ccds:
                     xywhn = general.xyxy2xywhn(coordinate[0][1:], w=naive_cp.shape[1], h=naive_cp.shape[0])
                     y_outputs.append(np.insert(xywhn, 0, coordinate[0][0]))
-                # y_output = np.insert(y_output, 0, src_lbl[0])
                 img = str(int(imgs[-1].split('.')[0]) + 1) + '.jpg'
                 lbl = str(int(labels[-1].split('.')[0]) + 1) + '.txt'
                 imgs.append(img)

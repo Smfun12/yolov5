@@ -167,6 +167,11 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, mask_size, result=None):
     mask = (mask * 255).round().astype(np.uint8)
     choice_x, choice_y = random.choice(valid_points)
     roi = tgt[choice_y:choice_y+height, choice_x:choice_x+width]
+
+    result = np.where(mask > 5, 255, mask)
+    result = np.where(result <= 5, 0, result)
+
+    mask = np.array(result[:, :, 0], dtype=np.uint8)
     _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
     mask_inv = cv2.bitwise_not(mask)
     img1_bg = cv2.bitwise_and(roi, roi, mask=mask_inv)
@@ -174,6 +179,7 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, mask_size, result=None):
 
     dst = cv2.add(img1_bg, img2_fg)
     tgt[choice_y:choice_y+height, choice_x:choice_x+width] = dst
+
     return tgt, choice_x, choice_y, scale_percent
 
 
