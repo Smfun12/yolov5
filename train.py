@@ -616,8 +616,10 @@ def generate_poisson_imgs(opt):
 
 def main(opt, callbacks=Callbacks()):
     # Checks
+    time_time = time.time()
     if opt.generate_poisson:
         generate_poisson_imgs(opt)
+    print('Time took to generate images=', time.time()-time_time)
     if RANK in {-1, 0}:
         print_args(vars(opt))
         check_git_status()
