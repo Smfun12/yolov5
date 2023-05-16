@@ -3,7 +3,9 @@ import time
 from typing import Any
 
 import cv2
+import numpy
 import numpy as np
+from PIL import Image, ImageDraw, ImageFilter
 
 from cp_gan_util.cp_gan import create_mask
 from poisson_util.io import read_image, write_image
@@ -158,15 +160,23 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, mask_size, result=None):
     mask_x, mask_y = None, None
     scale_percent = 105
     overlap_per = 0.05
+    padding = 10
+    # Points on tgt
     fst_bb_clone, gui, mask_x, mask_y, scale_percent = paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc,
-                                                                    result, scale_percent, src, tgt, tgt_bbs, valid_points)
+                                                                    result, scale_percent, src, tgt, tgt_bbs,
+                                                                    valid_points, padding)
 
     img_clone = gui.src.copy()
     width, height = fst_bb[2]-fst_bb[0], fst_bb[3]-fst_bb[1]
     mask = create_mask(img_clone, mask_size)
     mask = (mask * 255).round().astype(np.uint8)
     choice_x, choice_y = random.choice(valid_points)
-    roi = tgt[choice_y:choice_y+height, choice_x:choice_x+width]
+
+    bbox_x0 = max(0, int(fst_bb_clone[0]) - 2 * padding)
+    bbox_y0 = max(0, int(fst_bb_clone[1]) - 2 * padding)
+    bbox_x1 = min(gui.src.shape[1], int(fst_bb_clone[2]) + 2 * padding)
+    bbox_y1 = min(gui.src.shape[0], int(fst_bb_clone[3]) + 2 * padding)
+    roi = tgt[choice_y:choice_y + height, choice_x:choice_x + width]
 
     result = np.where(mask > 5, 255, mask)
     result = np.where(result <= 5, 0, result)
@@ -178,18 +188,43 @@ def create_poisson_img(src, tgt, fst_bb, tgt_bbs, mask_size, result=None):
     img2_fg = cv2.bitwise_and(img_clone, img_clone, mask=mask)
 
     dst = cv2.add(img1_bg, img2_fg)
-    tgt[choice_y:choice_y+height, choice_x:choice_x+width] = dst
+    # tgt[choice_y:choice_y+height, choice_x:choice_x+width] = dst
 
-    return tgt, choice_x, choice_y, scale_percent
+    # Src
+    src_pil = Image.fromarray(dst)
+    # draw_mask_on_src = ImageDraw.Draw(src_pil)
+    # draw_mask_on_src.rectangle(((bbox_x0, bbox_y0), (bbox_x1, bbox_y1)))
+    src_pil_copy = src_pil.copy()
+    src_pil_copy = src_pil_copy.crop((bbox_x0, bbox_y0, bbox_x1, bbox_y1))
+    # Mask
+    mask_im = Image.new("L", src_pil.size, 0)
+    draw_mask = ImageDraw.Draw(mask_im)
+    draw_mask.rectangle(((bbox_x0 + padding, bbox_y0 + padding), (bbox_x1 - padding, bbox_y1 - padding)), fill=255)
+    mask_im_blur = mask_im.filter(ImageFilter.GaussianBlur(5))
+    mask_im_blur_copy = mask_im_blur.copy()
+    mask_im_blur_copy = mask_im_blur_copy.crop((bbox_x0, bbox_y0, bbox_x1, bbox_y1))
+    # Tgt
+    tgt_pil = Image.fromarray(tgt)
+    # draw_mask_on_tgt = ImageDraw.Draw(tgt_pil)
+    # draw_mask_on_tgt.rectangle(((choice_x, choice_y), (width, height)))
+    tgt_copy = tgt_pil.copy()
+    width, height = choice_x + int(bbox_x1 - bbox_x0), choice_y + int(bbox_y1 - bbox_y0)
+    tgt_copy.paste(src_pil_copy, (choice_x, choice_y, width, height), mask_im_blur_copy)
+
+    # Convert Pil to cv2
+    tgt = np.array(tgt_copy)
+    cv2.imshow('win', tgt)
+    cv2.waitKey(0)
+    return tgt, choice_x + padding, choice_y + padding, scale_percent, padding
 
 
 def paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc, result, scale_percent, src, tgt,
-                 tgt_bbs, valid_points):
+                 tgt_bbs, valid_points, padding):
     while len(valid_points) == 0:
         scale_percent -= 5
         if scale_percent < 100:
             raise ValueError
-        gui = GUI(proc, src, tgt, result, 100, scale_percent=scale_percent)
+        gui = GUI(proc=proc, src=src, tgt=tgt, out=result, n=100, scale_percent=scale_percent)
         fst_bb_clone = fst_bb * (scale_percent // 100)
 
         mask_x = int(fst_bb_clone[2] - fst_bb_clone[0])
@@ -197,7 +232,8 @@ def paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc, result, scale_p
 
         for i in range(gui.tgt.shape[1]):
             for j in range(gui.tgt.shape[0]):
-                x_min_src_bb, y_min_src_bb, x_max_src_bb, y_max_src_bb = i, j, min(i + mask_x, gui.tgt.shape[1]), min(j + mask_y, gui.tgt.shape[0])
+                x_min_src_bb, y_min_src_bb, x_max_src_bb, y_max_src_bb = max(0, i - padding), max(0, j - padding), min(
+                    i + mask_x + padding, gui.tgt.shape[1]), min(j + mask_y + padding, gui.tgt.shape[0])
                 intersections = []
                 can_add = True
                 for tgt_bb in tgt_bbs:
@@ -212,21 +248,25 @@ def paste_object(fst_bb, gui, mask_x, mask_y, overlap_per, proc, result, scale_p
                         break
                     # check right down point
                     if (x_max_src_bb > x_min_tgt_bb and y_max_src_bb > y_min_tgt_bb):
-                        square = (min(x_max_tgt_bb, x_max_src_bb) - max(x_min_src_bb, x_min_tgt_bb)) * (y_max_src_bb - y_min_tgt_bb) / (
-                                    (x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
+                        square = (min(x_max_tgt_bb, x_max_src_bb) - max(x_min_src_bb, x_min_tgt_bb)) * (
+                                    y_max_src_bb - y_min_tgt_bb) / (
+                                         (x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
                         intersections.append(abs(square))
                     # check right upper point
                     if (x_max_src_bb > x_min_tgt_bb and y_min_src_bb > y_min_tgt_bb):
-                        square = (x_max_src_bb - x_min_tgt_bb) * (min(y_max_src_bb, y_max_tgt_bb) - y_min_src_bb) / ((x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
+                        square = (x_max_src_bb - x_min_tgt_bb) * (min(y_max_src_bb, y_max_tgt_bb) - y_min_src_bb) / (
+                                    (x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
                         intersections.append(abs(square))
                     # check left upper point
                     if (x_min_src_bb > x_min_tgt_bb and y_min_src_bb > y_min_tgt_bb):
-                        square = (x_max_tgt_bb - x_min_src_bb) * (min(y_max_src_bb, y_max_tgt_bb) - y_min_src_bb) / ((x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
+                        square = (x_max_tgt_bb - x_min_src_bb) * (min(y_max_src_bb, y_max_tgt_bb) - y_min_src_bb) / (
+                                    (x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
                         intersections.append(abs(square))
                     # check left down point
                     if (x_min_src_bb > x_min_tgt_bb and y_max_src_bb > y_min_tgt_bb):
-                        square = (min(x_max_tgt_bb, x_max_src_bb) - max(x_min_tgt_bb, x_min_src_bb)) * (y_max_src_bb - y_min_tgt_bb) / (
-                                    (x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
+                        square = (min(x_max_tgt_bb, x_max_src_bb) - max(x_min_tgt_bb, x_min_src_bb)) * (
+                                    y_max_src_bb - y_min_tgt_bb) / (
+                                         (x_max_src_bb - x_min_src_bb) * (y_max_src_bb - y_min_src_bb))
                         intersections.append(abs(square))
                 if sum(intersections) / max(1, len(intersections)) >= overlap_per:
                     can_add = False
